@@ -38,6 +38,8 @@ A history-scrub loupe.
 - **What:** a card on the right shows month + year, the message text, and a photo or muted looping video preview of the bubble nearest the upper part of the viewport. It hides when scrolling settles.
 - **Limitation:** the preview uses media already in the DOM (Telegram’s own thumbs / blob URLs). Messages that have not been rendered yet cannot be previewed.
 
+A local playground that drives the same timing, thread-walk, fan-layout and date-label functions is at `/fork-playground.html` while the Vite dev server is running.
+
 ## Feature flags
 
 All four default **on**. Toggle them in **Settings → General Settings → Extra features**, or with query parameters:

@@ -334,7 +334,8 @@ replay.onclick = () => play(current);
 nav.append(replay);
 
 root.append(nav, hint, stage);
-play(0);
+const fromQuery = Math.max(0, Math.min(3, (+new URLSearchParams(location.search).get('f') || 1) - 1));
+play(fromQuery);
 
 window.addEventListener('keydown', (event) => {
   if(event.key >= '1' && event.key <= '4') play(+event.key - 1);

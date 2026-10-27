@@ -27,7 +27,7 @@ pnpm install
 pnpm start
 ```
 
-4. Open http://localhost:8080/ in Chrome or Edge.
+4. Open http://localhost:8080/ in Chrome or Edge. After `pnpm dev`, a local playground of the four extra features (same timing / thread / fan / date code as the client) is at http://localhost:43817/fork-playground.html.
 5. Sign in with your own Telegram account the same way you would on web.telegram.org/k — phone number, login code, 2FA password if you use one. This app never stores those in source and never logs them.
 
 Optional:
@@ -43,10 +43,10 @@ To turn one extra feature off, append a query flag, for example http://localhost
 ### Production / static host
 
 ```bat
-pnpm exec vite build
+pnpm build:static
 ```
 
-Copy the `dist/` folder to any static host (nginx, GitHub Pages, Cloudflare Pages, `npx serve dist`). A full `pnpm build` also runs the upstream test suite, typecheck, and changelog step; it is slower and not required just to ship the files.
+That is `vite build` without the full test/typecheck/changelog pipeline. Copy the `dist/` folder to any static host (nginx, GitHub Pages, Cloudflare Pages, `npx serve dist`). A full `pnpm build` also runs the upstream test suite, typecheck, and changelog step; it is slower and not required just to ship the files.
 
 Docker (upstream):
 

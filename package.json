@@ -10,6 +10,7 @@
     "start-in-docker": "vite --host",
     "serve": "pnpm run build && node server.js --dist",
     "build": "pnpm test --run && pnpm run typecheck && pnpm run generate-changelog && vite build && pnpm run check-bundle",
+    "build:static": "vite build",
     "check-bundle": "node scripts/check-bundle-mangling.mjs dist",
     "test": "vitest",
     "test:a11y": "playwright test --config playwright.a11y.config.ts",
