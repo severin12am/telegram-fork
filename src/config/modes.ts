@@ -1,0 +1,79 @@
+/*
+ * Originally from:
+ * https://github.com/zhukov/webogram
+ * Copyright (C) 2014 Igor Zhukov <igor.beatle@gmail.com>
+ * https://github.com/zhukov/webogram/blob/master/LICENSE
+ */
+
+import type {TransportType} from '@lib/mtproto/dcConfigurator';
+
+const Modes = {
+  // * or a preview whose account lives on the test DCs (VITE_TEST_DC, from its seed - see
+  // * vite.preview.config.ts), so that no link to it needs ?test=1 to work
+  test: location.search.indexOf('test=1') > 0 || !!import.meta.env.VITE_TEST_DC,
+  debug: location.search.indexOf('debug=1') > 0,
+  // Preview-only QA override: exercise the non-contact link gate even when
+  // the server does not expose report_spam / block_contact for the peer.
+  forceHideNonContactLinks: !!import.meta.env.VITE_PREVIEW &&
+    location.search.indexOf('forceHideNonContactLinks=1') > 0,
+  http: false,
+  ssl: true, // location.search.indexOf('ssl=1') > 0 || location.protocol === 'https:' && location.search.indexOf('ssl=0') === -1,
+  asServiceWorker: !!import.meta.env.VITE_MTPROTO_SW,
+  transport: 'websocket' as TransportType,
+  noSharedWorker: location.search.indexOf('noSharedWorker=1') > 0,
+  noServiceWorker: location.search.indexOf('noServiceWorker=1') > 0,
+  noOffscreenCanvas: location.search.indexOf('noOffscreenCanvas=1') > 0,
+  // Kill switch for the SHARED object-URL lifecycle: with it on, worker-minted
+  // blob URLs are never evicted from the caches, never revoked, and pins are
+  // not reported — the old leak-forever behaviour for shared media.
+  // Tab-local one-off URLs (ObjectURLScope: editor previews, upload previews,
+  // decoded voice) are NOT covered: disposing those is self-contained and was
+  // a plain leak fix, so it stays active even here. Neither are the handful of
+  // pre-existing raw URL.revokeObjectURL call sites (recording, rtmp, download).
+  // * OFF everywhere by default — the lifecycle is live in production too.
+  // * ?noObjectUrlRevoke=1 forces it on to fall back to the old behaviour
+  //   (it reaches the worker too — makeWorkerURL forwards query params).
+  noObjectUrlRevoke: location.search.indexOf('noObjectUrlRevoke=1') > 0,
+  // Run MTProto + crypto entirely in the main thread (debug only). Loops the
+  // worker entries back through a MessageChannel in the same realm so
+  // breakpoints / call stacks span the whole pipeline. Multi-tab features
+  // (SharedWorker dedup, auto-lock cross-tab) silently degrade.
+  // Triggers: ?noWorker=1 in the URL, or VITE_NO_WORKER injected at build time
+  // by `bash scripts/start-preview.sh --no-worker`.
+  noWorker: location.search.indexOf('noWorker=1') > 0 || !!import.meta.env.VITE_NO_WORKER,
+  multipleTransports: !!(import.meta.env.VITE_MTPROTO_AUTO && import.meta.env.VITE_MTPROTO_HAS_HTTP && import.meta.env.VITE_MTPROTO_HAS_WS) && location.search.indexOf('noMultipleTransports=1') === -1,
+  // Perfect Forward Secrecy: every networker talks over a temporary auth key
+  // bound to the stored permanent one (auth.bindTempAuthKey), replaced once it
+  // expires or the server forgets it. On by default; ?noPfs=1 turns it off (the
+  // worker sees it too — makeWorkerURL forwards query params).
+  pfs: location.search.indexOf('noPfs=1') === -1,
+  // The keyboard and screen-reader layer: focus traps, roving tab stops, focus
+  // rings, key routing, inert off-screen columns, pinch zoom. Off by default
+  // until it settles; ?a11y=1 turns it on. ARIA names and roles stay either way,
+  // since nobody without assistive technology can tell they are there.
+  a11y: location.search.indexOf('a11y=1') > 0,
+  // Lays the app out right to left in whatever language is loaded, to check a layout in RTL
+  // without switching to Arabic, Persian or Hebrew; the real switch follows the language.
+  rtl: location.search.indexOf('rtl=1') > 0,
+  // Keeps a memory history of this tab (lib/debug/memoryWatch) for as long as the URL carries it -
+  // a developer's own long-lived tab, never anyone else's.
+  memoryWatch: location.search.indexOf('memoryWatch=1') > 0
+};
+
+if(import.meta.env.VITE_MTPROTO_HAS_HTTP) {
+  const httpOnly = Modes.http = location.search.indexOf('http=1') > 0;
+  if(httpOnly) {
+    Modes.multipleTransports = false;
+  }
+}
+
+// * start with HTTP first
+if(Modes.multipleTransports) {
+  Modes.http = true;
+}
+
+if(Modes.http) {
+  Modes.transport = 'https';
+}
+
+export default Modes;
