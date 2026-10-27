@@ -11,8 +11,8 @@ export type ReplyLoomHost = {
     peerId: PeerId,
     getMessage: (mid: number) => any,
     input: {
-      initMessageReply: (replyTo: {replyToMsgId: number}) => void,
-      getChatInputReplyToFromMessage?: (message: Message.message) => {replyToMsgId: number}
+      initMessageReply: (replyTo: {replyToMsgId?: number}) => unknown,
+      getChatInputReplyToFromMessage?: (message: Message.message) => {replyToMsgId?: number}
     }
   }
 };
