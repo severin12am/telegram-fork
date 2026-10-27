@@ -15,6 +15,8 @@ import cancelEvent from '@helpers/dom/cancelEvent';
 import {attachClickEvent, simulateClickEvent} from '@helpers/dom/clickEvent';
 import isSelectionEmpty from '@helpers/dom/isSelectionEmpty';
 import {Message, Poll, Chat as MTChat, MessageEntity, MessageMedia, InputStickerSet, StickerSet, Document, Reaction, Photo, SponsoredMessage, TextWithEntities, TodoItem, TodoCompletion, MessageReplyHeader, PollAnswer} from '@layer';
+import {isForkFeatureEnabled} from '@lib/forkFeatures/flags';
+import {openReplyLoom} from '@lib/forkFeatures/replyLoom/sheet';
 import assumeType from '@helpers/assumeType';
 import showSponsoredPopup from '@components/popups/sponsored';
 import ListenerSetter from '@helpers/listenerSetter';
@@ -1068,6 +1070,21 @@ export default class ChatContextMenu {
         this.chat.type !== ChatType.Scheduled &&
         (this.chat.bubbles.canForward(this.message) || this.chat.canSend())/* ,
       cancelEvent: true */
+    }, {
+      icon: 'bubblereply',
+      text: 'ForkFeatures.Thread',
+      onClick: () => {
+        const message = this.message as Message.message;
+        openReplyLoom({
+          container: this.chat.bubbles.container,
+          chatInner: this.chat.bubbles.chatInner,
+          chat: this.chat
+        }, message);
+      },
+      verify: () => isForkFeatureEnabled('replyLoom') &&
+        this.message?._ === 'message' &&
+        !this.message.pFlags.is_outgoing &&
+        !isAnchoredEphemeralMessage(this.message)
     }, {
       icon: 'bubblereply',
       text: 'ViewReplies',

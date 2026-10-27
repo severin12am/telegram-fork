@@ -26,6 +26,7 @@ import ChatThemesPicker from '@components/chatThemesPicker';
 import ChatBackgroundStore from '@lib/chatBackgroundStore';
 import appDownloadManager from '@lib/appDownloadManager';
 import {hotReloadGuard} from '@lib/solidjs/hotReloadGuardProvider';
+import ForkFeaturesSection from '@lib/forkFeatures/settings';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Section 1 — text size, chat background, animations toggle, lite mode entry
@@ -352,6 +353,7 @@ const GeneralSettings = () => {
   return (
     <>
       <SettingsSection />
+      <ForkFeaturesSection />
       <ThemeSection />
       {IS_GEOLOCATION_SUPPORTED && <DistanceUnitsSection />}
       <TimeFormatSection />

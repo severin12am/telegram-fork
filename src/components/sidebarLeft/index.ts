@@ -88,6 +88,7 @@ import uiNotificationsManager from '@lib/uiNotificationsManager';
 import {renderFoldersSidebarContent} from '@components/sidebarLeft/foldersSidebarContent';
 import SolidJSHotReloadGuardProvider, {registerHotReloadGuard} from '@lib/solidjs/hotReloadGuardProvider';
 import {AppChatFoldersTab} from '@components/solidJsTabs/tabs';
+import {installFan} from '@lib/forkFeatures/fan/overlay';
 import {SliderSuperTabConstructable} from '@components/sliderTab';
 import showSliderPopup from '@components/sliderPopup';
 import {AppEditFolderTab} from '@components/solidJsTabs/tabs';
@@ -171,6 +172,13 @@ export class AppSidebarLeft extends SidebarSlider {
     this.managers = managers;
 
     this.chatListContainer = document.getElementById('chatlist-container');
+    installFan({
+      root: this.chatListContainer,
+      getScrollable: () => this.chatListContainer.querySelector<HTMLElement>('.scrollable'),
+      openPeer: (peerId) => {
+        appImManager.setInnerPeer({peerId});
+      }
+    });
     // the placeholder up front names the field; without the keyboard layer the connection status sets it, as it always did
     this.inputSearch = new InputSearch({oldStyle: true, placeholder: Modes.a11y ? 'Search' : undefined});
     if(!Modes.a11y) (this.inputSearch.input as HTMLInputElement).placeholder = ' ';

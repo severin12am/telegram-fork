@@ -1,76 +1,83 @@
-## Telegram Web K
-Based on Webogram, patched and improved. Available for everyone here: https://web.telegram.org/k/
+# Telegram Web K (fork)
 
+A working fork of Telegram’s official open-source web client **[Telegram Web K / tweb](https://github.com/morethanwords/tweb)** (GPL-3.0).
 
-### Developing
-Install dependencies with:
-```lang=bash
-pnpm install
+This tree keeps upstream history. The imported `tweb/master` commit is **`b494470fa4ebbd7bb64fa9378f202944dc8158fd`**. Four extra features — Voice Score, Reply Loom, Fan, and Year Rail — are implemented as real client code against live Telegram chats. See [FORK.md](FORK.md) for what each one does, where it lives in the UI, and the MTProto limits.
+
+Official WebK remains available at https://web.telegram.org/k/
+
+## Run locally on Windows
+
+You need **Node.js 22.18+** (or 24.11+) and **pnpm 11**. Git is required so the `opus-recorder` and `solid` submodules can be fetched.
+
+1. Install Node from https://nodejs.org/ (LTS 22 is fine).
+2. In **PowerShell** or **Command Prompt**:
+
+```bat
+corepack enable
+corepack prepare pnpm@11.16.0 --activate
 ```
-This will install all the needed dependencies.
 
+3. Clone this repository, then:
 
-#### Running web-server
-Just run `pnpm start` to start the web server and the livereload task.
-Open http://localhost:8080/ in your browser.
+```bat
+cd path\to\this\repo
+git submodule update --init --recursive
+pnpm install
+pnpm start
+```
 
+4. Open http://localhost:8080/ in Chrome or Edge.
+5. Sign in with your own Telegram account the same way you would on web.telegram.org/k — phone number, login code, 2FA password if you use one. This app never stores those in source and never logs them.
 
-#### Running in production
+Optional:
 
-Run `node build` to build the minimized production version of the app. Copy `public` folder contents to your web server.
+```bat
+pnpm dev
+```
 
-### Running in docker
+serves the same app on http://localhost:43817/ and binds every interface (useful if you open the page from another device on the LAN).
 
-#### Developing: 
-* Install dependencies `docker-compose up tweb.dependencies`.
-* Run develop container `docker-compose up tweb.develop `.
-* Open http://localhost:8080/ in your browser. 
+To turn one extra feature off, append a query flag, for example http://localhost:8080/?fan=0 — or use **Settings → General Settings → Extra features**.
 
-#### Production:
-* Run `docker-compose up tweb.production -d` nginx image and container to serve the build
-* Open http://localhost:80/ in your browser.
+### Production / static host
 
-You can use `docker build -f ./.docker/Dockerfile_production -t {dockerhub-username}/{imageName}:{latest} .` to build your production ready image.
+```bat
+pnpm exec vite build
+```
 
-### Dependencies
-* [BigInteger.js](https://github.com/peterolson/BigInteger.js) ([Unlicense](https://github.com/peterolson/BigInteger.js/blob/master/LICENSE))
-* [fflate](https://github.com/101arrowz/fflate) ([MIT License](https://github.com/101arrowz/fflate/blob/master/LICENSE))
-* [cryptography](https://github.com/spalt08/cryptography) ([Apache License 2.0](https://github.com/spalt08/cryptography/blob/master/LICENSE))
-* [emoji-data](https://github.com/iamcal/emoji-data) ([MIT License](https://github.com/iamcal/emoji-data/blob/master/LICENSE))
-* [emoji-test-regex-pattern](https://github.com/mathiasbynens/emoji-test-regex-pattern) ([MIT License](https://github.com/mathiasbynens/emoji-test-regex-pattern/blob/main/LICENSE))
-* [tlottie](https://github.com/dkaraush/tlottie) (MIT License)
-* [fast-png](https://github.com/image-js/fast-png) ([MIT License](https://github.com/image-js/fast-png/blob/master/LICENSE))
-* [opus-recorder](https://github.com/chris-rudmin/opus-recorder) ([BSD License](https://github.com/chris-rudmin/opus-recorder/blob/master/LICENSE.md))
-* [Prism](https://github.com/PrismJS/prism) ([MIT License](https://github.com/PrismJS/prism/blob/master/LICENSE))
-* [Solid](https://github.com/solidjs/solid) ([MIT License](https://github.com/solidjs/solid/blob/main/LICENSE))
-* [TinyLD](https://github.com/komodojp/tinyld) ([MIT License](https://github.com/komodojp/tinyld/blob/develop/license))
-* [libwebp.js](https://libwebpjs.appspot.com/)
-* fastBlur
-* [Mediabunny](https://github.com/Vanilagy/mediabunny) ([Mozilla Public License 2.0](https://github.com/Vanilagy/mediabunny/blob/main/LICENSE))
-* [Temml](https://github.com/ronkok/Temml) ([MIT License](https://github.com/ronkok/Temml/blob/main/LICENSE))
+Copy the `dist/` folder to any static host (nginx, GitHub Pages, Cloudflare Pages, `npx serve dist`). A full `pnpm build` also runs the upstream test suite, typecheck, and changelog step; it is slower and not required just to ship the files.
 
-### Debugging
-You are welcome in helping to minimize the impact of bugs. There are classes, binded to global context. Look through the code for certain one and just get it by its name in developer tools.
-Source maps are included in production build for your convenience.
+Docker (upstream):
 
-#### Additional query parameters
-* **test=1**: to use test DCs
-* **debug=1**: to enable additional logging
-* **noSharedWorker=1**: to disable Shared Worker, can be useful for debugging
-* **http=1**: to force the use of HTTPS transport when connecting to Telegram servers
+```bat
+docker-compose up tweb.dependencies
+docker-compose up tweb.develop
+```
 
-Should be applied like that: http://localhost:8080/?test=1
+Then open http://localhost:8080/
 
-#### Taking local storage snapshots
-You can also take and load snapshots of the local storage and indexed DB using the `./snapshot-server` [mini-app](/snapshot-server/README.md). Check the `README.md` under this folder for more details.
+## Debugging query parameters
 
-#### Preview all icons
-You can see all the available svg icons by calling the `showIconLibrary()` global function in the browser's console.
+Same as upstream. Examples: http://localhost:8080/?test=1
 
-### Troubleshooting & Suggesting
+* **test=1** — Telegram test DCs
+* **debug=1** — extra logging
+* **noSharedWorker=1** — disable Shared Worker
+* **http=1** — force HTTPS transport
+* **voiceScore=0 / replyLoom=0 / fan=0 / yearRail=0** — disable a fork feature
 
-If you find an issue with this app or wish something to be added, let Telegram know using the [Suggestions Platform](https://bugs.telegram.org/c/4002).
+## License and credit
 
-### Licensing
+Licensed under **GPL-3.0-only**, same as tweb. The full license is in [LICENSE](LICENSE).
 
-The source code is licensed under GPL v3. License is available [here](/LICENSE).
+This fork is based on:
+
+* [morethanwords/tweb](https://github.com/morethanwords/tweb) — Telegram Web K, Eduard Kuzmenko and contributors
+* [zhukov/webogram](https://github.com/zhukov/webogram) — the original Webogram client
+
+Do not file product bugs for the four extra features on bugs.telegram.org; those are local to this fork.
+
+### Upstream dependencies
+
+Unchanged from tweb: BigInteger.js, fflate, cryptography, emoji-data, tlottie, fast-png, opus-recorder, Prism, Solid, TinyLD, libwebp.js, Mediabunny, Temml, and the others listed in the original tweb README.

@@ -10,6 +10,9 @@ import {logger} from '@lib/logger';
 import rootScope from '@lib/rootScope';
 import BubbleGroups from '@components/chat/bubbleGroups';
 import createDateBubble from '@components/chat/dateBubble';
+import {isForkFeatureEnabled} from '@lib/forkFeatures/flags';
+import {closeReplyLoom, destroyReplyLoom, openReplyLoom, refreshReplyLoom} from '@lib/forkFeatures/replyLoom/sheet';
+import {destroyYearRail, ensureYearRail} from '@lib/forkFeatures/yearRail/loupe';
 import showDatePickerPopup from '@components/popups/datePicker';
 import confirmationPopup from '@components/confirmationPopup';
 import showStickersPopup from '@components/popups/stickers';
@@ -4396,6 +4399,15 @@ export default class ChatBubbles {
           return;
         }
 
+        if(isForkFeatureEnabled('replyLoom') && message?._ === 'message') {
+          openReplyLoom({
+            container: this.container,
+            chatInner: this.chatInner,
+            chat: this.chat
+          }, message);
+          return;
+        }
+
         let replyToMid = replyTo.reply_to_msg_id;
         if(!replyToMid) {
           toastNew({langPackKey: replyTo.pFlags.quote ? 'QuotePrivate' : 'ReplyPrivate'});
@@ -5176,6 +5188,16 @@ export default class ChatBubbles {
     this.updateGoDownVisibility();
 
     this.checkIntersectingVideos();
+
+    ensureYearRail({
+      container: this.container,
+      chatInner: this.chatInner,
+      scrollable: this.scrollable.container,
+      getMessage: (mid) => this.chat.getMessage(mid)
+    }).onScroll(
+      this.chatInner.classList.contains('is-scrolling') || !!this.isScrollingTimeout,
+      this.scrollable.lastScrollDirection
+    );
 
     // Recompute visible ranges (also on programmatic scroll); user-activity is fed only by real
     // input events, so the scroll handler intentionally does NOT register activity here.
@@ -6192,6 +6214,8 @@ export default class ChatBubbles {
     delete this.lazyLoadQueue;
     this.observer && delete this.observer;
     this.stickyIntersector && delete this.stickyIntersector;
+    destroyYearRail(this.container);
+    destroyReplyLoom(this.container);
   }
 
   private placeBubbleTimesAnew = () => {
@@ -6217,6 +6241,7 @@ export default class ChatBubbles {
 
   public cleanup(bubblesToo = false) {
     this.log('cleanup');
+    closeReplyLoom(this.container);
 
     // Content is about to be wiped (peer switch / screen teardown) — end every read-metrics phase.
     this.readMetricsTracker?.finalizeAll();
@@ -12723,6 +12748,9 @@ export default class ChatBubbles {
     }
 
     log?.('performHistoryResult end');
+    if(this.container.classList.contains('has-reply-loom')) {
+      refreshReplyLoom(this.container);
+    }
   }
 
   private onRenderScrollSet(state?: {scrollHeight: number, clientHeight: number}) {

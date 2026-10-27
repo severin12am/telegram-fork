@@ -11,6 +11,9 @@ import {hideToast, toastNew} from '@components/toast';
 import anchorCallback from '@helpers/dom/anchorCallback';
 import A11yButton from '@components/a11yButton';
 import {hotReloadGuard} from '@lib/solidjs/hotReloadGuardProvider';
+import getMediaFromMessage from '@appManagers/utils/messages/getMediaFromMessage';
+import VoiceScoreWords from '@lib/forkFeatures/voiceScore/VoiceScoreWords';
+import {isForkFeatureEnabled} from '@lib/forkFeatures/flags';
 
 
 /**
@@ -53,7 +56,13 @@ export function reduceTranscribed(
   };
 }
 
-function TranscribedText(props: {id: string, state: TranscriptionState}) {
+function voiceDuration(row: TranscribableRow) {
+  const media = getMediaFromMessage(row.message, true) as {duration?: number};
+  return media?.duration || 0;
+}
+
+function TranscribedText(props: {id: string, state: TranscriptionState, row: () => TranscribableRow}) {
+  const scored = () => isForkFeatureEnabled('voiceScore') && !!props.state.text && !props.state.error;
   return (
     <div
       class="audio-transcribed-text"
@@ -64,7 +73,11 @@ function TranscribedText(props: {id: string, state: TranscriptionState}) {
         'hide': !props.state.expanded
       }}
     >
-      <Show when={props.state.error} fallback={props.state.text}>
+      <Show when={props.state.error} fallback={
+        scored() ?
+          <VoiceScoreWords text={props.state.text} durationSec={voiceDuration(props.row())} row={props.row} /> :
+          props.state.text
+      }>
         {i18n('Chat.Voice.Transribe.Error')}
       </Show>
       <Show when={props.state.pending}>
@@ -115,7 +128,7 @@ function TranscribeButton(props: {
   const textId = createUniqueId();
   // This is readable content, not a live status: streamed updates must not
   // repeatedly announce the entire transcript (including cached results).
-  const text = children(() => hasText() ? <TranscribedText id={textId} state={props.state} /> : undefined);
+  const text = children(() => hasText() ? <TranscribedText id={textId} state={props.state} row={props.row} /> : undefined);
 
   let mounted: HTMLElement;
   createEffect(() => {

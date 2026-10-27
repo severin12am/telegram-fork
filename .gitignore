@@ -19,6 +19,7 @@ archive.zip
 src/langPackLocalVersion.ts
 /.ai
 tmp
+uploads
 
 # Throw files you don't need in this folder
 ignore

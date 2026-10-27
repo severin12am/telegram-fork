@@ -1,0 +1,335 @@
+@use "../shared" as *;
+
+.voice-score-words {
+  display: inline;
+}
+
+.voice-score-word {
+  appearance: none;
+  border: 0;
+  background: none;
+  padding: 0 1px;
+  margin: 0;
+  font: inherit;
+  line-height: inherit;
+  letter-spacing: inherit;
+  color: inherit;
+  border-radius: 5px;
+  cursor: pointer;
+  vertical-align: baseline;
+
+  &-said {
+    color: inherit;
+  }
+
+  &-now {
+    background: var(--message-primary-color, var(--primary-color));
+    color: #fff;
+  }
+}
+
+.bubble.is-out .voice-score-word-now {
+  background: var(--message-out-primary-color, var(--message-primary-color));
+  color: #fff;
+}
+
+.reply-loom-dim {
+  opacity: .2 !important;
+  pointer-events: none;
+  transition: opacity .22s ease;
+}
+
+.reply-loom-sheet {
+  position: absolute;
+  inset: 18% 0 0;
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface-color);
+  border-radius: 16px 16px 0 0;
+  box-shadow: 0 -10px 32px rgba(0, 0, 0, .18);
+  transform: translate3d(0, 110%, 0);
+  opacity: 0;
+  pointer-events: none;
+  will-change: transform, opacity;
+
+  &.is-open {
+    transform: translate3d(0, 0, 0);
+    opacity: 1;
+    pointer-events: auto;
+    transition: transform .32s cubic-bezier(.2, .8, .2, 1), opacity .2s ease;
+  }
+
+  &.no-motion,
+  &.no-motion.is-open {
+    transition: none;
+  }
+
+  &-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    padding: 12px 14px 8px;
+    flex: none;
+
+    b {
+      font-size: 17px;
+      font-weight: 600;
+    }
+  }
+
+  &-back {
+    appearance: none;
+    border: 0;
+    background: none;
+    padding: 0;
+    color: var(--primary-color);
+    font: inherit;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  &-body {
+    overflow: auto;
+    padding: 4px 10px 14px;
+    flex: 1;
+  }
+}
+
+.reply-loom-row {
+  display: flex;
+  margin: 2px 0;
+
+  &.is-out {
+    justify-content: flex-end;
+  }
+}
+
+.reply-loom-bubble {
+  max-width: 78%;
+  padding: 6px 9px 4px;
+  background: var(--message-background-color, var(--surface-color));
+  border-radius: 15px 15px 15px 5px;
+  box-shadow: 0 1px 1px rgba(0, 0, 0, .06);
+
+  &.is-out {
+    background: var(--message-out-background-color, #eeffde);
+    border-radius: 15px 15px 5px 15px;
+  }
+}
+
+.reply-loom-text {
+  font-size: var(--messages-text-size, 16px);
+  line-height: 1.3125;
+  color: var(--primary-text-color);
+  overflow-wrap: anywhere;
+}
+
+.reply-loom-media {
+  display: block;
+  width: 220px;
+  max-width: 100%;
+  height: 140px;
+  object-fit: cover;
+  border-radius: 10px;
+  margin-bottom: 4px;
+}
+
+.reply-loom-meta {
+  display: block;
+  text-align: right;
+  font-size: 11px;
+  margin-top: 1px;
+  color: var(--secondary-text-color);
+}
+
+.fan-veil {
+  position: absolute;
+  inset: 0;
+  z-index: 8;
+  background: rgba(0, 0, 0, .28);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .2s ease;
+
+  &.is-open {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+
+.fan-stage,
+.fan-empty {
+  position: absolute;
+  inset: 0;
+  z-index: 9;
+  pointer-events: none;
+}
+
+.fan-empty {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 28%;
+  color: #fff;
+  font-weight: 600;
+  opacity: 0;
+
+  &.is-open {
+    opacity: 1;
+  }
+}
+
+.fan-card {
+  appearance: none;
+  position: absolute;
+  left: 50%;
+  top: 16%;
+  width: min(230px, calc(100% - 48px));
+  margin-left: calc(min(230px, calc(100% - 48px)) / -2);
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 12px 14px;
+  border: 1px solid rgba(0, 0, 0, .08);
+  border-radius: 16px;
+  background: var(--surface-color);
+  color: var(--primary-text-color);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, .18);
+  text-align: left;
+  cursor: pointer;
+  opacity: 0;
+  transform: translate3d(0, 0, 0) rotate(0deg);
+  will-change: transform, opacity;
+  pointer-events: none;
+
+  .fan-stage.is-open & {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translate3d(var(--fan-x), var(--fan-y), 0) rotate(var(--fan-r));
+    transition: transform .38s cubic-bezier(.2, .8, .2, 1), opacity .24s ease;
+    transition-delay: calc(var(--fan-i) * 28ms);
+  }
+
+  .fan-stage.no-motion & {
+    transition: none;
+  }
+
+  &.is-leaving {
+    transition: transform .28s ease, opacity .28s ease !important;
+  }
+
+  &-avatar {
+    flex: none;
+    width: 46px;
+    height: 46px;
+    overflow: hidden;
+    border-radius: 50%;
+
+    .avatar,
+    .row-media,
+    img {
+      width: 46px !important;
+      height: 46px !important;
+    }
+  }
+
+  &-copy {
+    min-width: 0;
+    flex: 1;
+
+    b {
+      display: block;
+      font-size: 16px;
+      font-weight: 600;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    p {
+      margin: 4px 0 0;
+      font-size: 14px;
+      color: var(--secondary-text-color);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+  }
+
+  &-badge {
+    flex: none;
+    min-width: 20px;
+    padding: 1px 6px;
+    border-radius: 10px;
+    background: var(--primary-color);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 700;
+    text-align: center;
+  }
+}
+
+.year-rail-loupe {
+  position: absolute;
+  top: 22%;
+  right: 18px;
+  z-index: 5;
+  width: 210px;
+  padding: 8px;
+  border-radius: 14px;
+  background: var(--surface-color);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .16);
+  opacity: 0;
+  pointer-events: none;
+  transform: translate3d(0, 6px, 0);
+  transition: opacity .16s ease, transform .16s ease;
+
+  &.is-open {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+
+  &.no-motion {
+    transition: none;
+  }
+
+  &-k {
+    color: var(--primary-color);
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+  }
+
+  p {
+    margin: 4px 0 0;
+    font-size: 14px;
+    line-height: 1.3;
+    color: var(--primary-text-color);
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  &-media {
+    img,
+    video {
+      display: block;
+      width: 100%;
+      height: 88px;
+      object-fit: cover;
+      border-radius: 10px;
+      margin-top: 6px;
+    }
+  }
+}
+
+@include respond-to(handhelds) {
+  .year-rail-loupe {
+    right: 10px;
+    width: 168px;
+  }
+}
