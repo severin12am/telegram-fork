@@ -18,16 +18,16 @@ Karaoke-style read-along on a voice-message transcription.
 
 A thread sheet for ordinary reply chains (not only channel comments).
 
-- **Where:** long-press a message (mouse or touch), right-click → **Thread**, or tap a reply quote. The Thread item is hidden on messages that are not part of a reply chain.
-- **What:** unrelated bubbles dim. A bottom sheet titled **Thread** lists the root and every reply we can see in the open chat. The composer is armed to reply in that chain. **Back to chat** closes the sheet.
-- **Limitation:** Telegram does not expose a “replies to this mid” search for private chats. The loom walks `reply_to` on messages already loaded in the chat. Send or scroll to load more of the chain, then reopen.
+- **Where:** long-press a message (mouse or touch), or right-click → **Thread**. A plain click on a quoted reply still jumps to and highlights that original message. The Thread item is hidden on messages that are not part of a reply chain.
+- **What:** unrelated bubbles dim. A sheet titled **Thread** sits below the chat header and any pinned-message bar, and lists the root plus every loaded reply — including branches and 3+ participants. The composer is armed to reply in that chain. **Back to chat** closes the sheet.
+- **Limitation:** Telegram does not expose a “replies to this mid” search for private chats. The loom walks `reply_to` / `reply_to_mid` on messages already loaded (on screen or in the history cache). Send or scroll to load more of the chain, then reopen.
 
 ### 3. Fan
 
 Unread chats spread into a card fan.
 
-- **Where:** the left chat list. Pull down from the top (touch or click-drag) or scroll/wheel up while already at the top — a small nudge is ignored; the pull has to be deliberate.
-- **What:** unread rows become stacked, slightly rotated cards (title, last-message preview, unread badge, the same avatar Telegram already drew). Tap a card to open that chat. Swipe a card sideways to skip it. **Close**, scroll/swipe down, or tap the dimmed backdrop puts every card away and the list is immediately usable again.
+- **Where:** the left chat list, and **only** when that list is already at `scrollTop` 0. Pull down (touch or click-drag) or keep scrolling/wheeling up so the list overscrolls. Scrolling up mid-list never opens it.
+- **What:** unread rows become stacked, slightly rotated cards (title, last-message preview, unread badge, the same avatar Telegram already drew). Tap a card to open that chat. Swipe a card sideways to skip it. **Close all** (a real button at the bottom of the overlay), scroll/swipe down, or tap the dimmed backdrop puts every card away and the list is immediately usable again.
 - **Limitation:** cards come from the chats already rendered in the current folder. Chats that have not been painted yet will not appear until they show up in the list.
 
 ### 4. Year Rail

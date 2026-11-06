@@ -1,22 +1,34 @@
 import liteMode from '@helpers/liteMode';
-import {i18n} from '@lib/langPack';
 import {collectUnreadFromChatlist, FanCardModel, fanPoses} from '@lib/forkFeatures/fan/collectUnread';
 import {isForkFeatureEnabled} from '@lib/forkFeatures/flags';
+import {forkLabel} from '@lib/forkFeatures/label';
+import {
+  eventOnScrollable,
+  listIsAtTop,
+  reduceFanWheel,
+  type FanWheelState
+} from '@lib/forkFeatures/fan/gesture';
+import {
+  FAN_CLOSE_TEXT,
+  FAN_PULL_SLOP,
+  FAN_PULL_THRESHOLD,
+  FAN_WHEEL_CLOSE
+} from '@lib/forkFeatures/fan/overlayConstants';
+
+export {
+  FAN_CLOSE_TEXT,
+  FAN_PULL_SLOP,
+  FAN_PULL_THRESHOLD,
+  FAN_WHEEL_CLOSE,
+  FAN_WHEEL_OPEN
+} from '@lib/forkFeatures/fan/overlayConstants';
+export {getFanScrollable, listIsAtTop, reduceFanWheel} from '@lib/forkFeatures/fan/gesture';
 
 export type FanHost = {
   root: HTMLElement,
   getScrollable: () => HTMLElement | null,
   openPeer: (peerId: PeerId) => void
 };
-
-/** Downward pull (px) before unread cards fan out. Small scrolls must not trip it. */
-export const FAN_PULL_THRESHOLD = 140;
-/** Extra slop before a pointer-down is treated as a pull at all. */
-export const FAN_PULL_SLOP = 28;
-/** Accumulated upward wheel delta (px) at the top of the list before opening. */
-export const FAN_WHEEL_OPEN = 480;
-/** Downward wheel delta while open that closes every card. */
-export const FAN_WHEEL_CLOSE = 36;
 
 export class FanOverlay {
   private veil: HTMLElement;
@@ -28,7 +40,7 @@ export class FanOverlay {
   private dragging = false;
   private tracking = false;
   private startY = 0;
-  private wheelAccum = 0;
+  private wheelState: FanWheelState = {accum: 0, blocked: false};
   private wheelTimer = 0;
   private cards: HTMLElement[] = [];
   private models: FanCardModel[] = [];
@@ -51,7 +63,8 @@ export class FanOverlay {
     this.closeBtn = document.createElement('button');
     this.closeBtn.type = 'button';
     this.closeBtn.className = 'fan-close';
-    this.closeBtn.append(i18n('ForkFeatures.FanClose'));
+    this.closeBtn.dataset.forkAction = 'fan-close';
+    this.setCloseLabel();
     this.closeBtn.addEventListener('click', (event) => {
       event.preventDefault();
       event.stopPropagation();
@@ -62,7 +75,7 @@ export class FanOverlay {
     this.empty = document.createElement('div');
     this.empty.className = 'fan-empty';
     this.empty.setAttribute('inert', '');
-    this.empty.append(i18n('ForkFeatures.FanEmpty'));
+    this.empty.textContent = forkLabel('ForkFeatures.FanEmpty', 'No unread chats');
 
     this.host.root.append(this.veil, this.stage, this.empty);
     this.bindGestures();
@@ -77,6 +90,8 @@ export class FanOverlay {
       return;
     }
 
+    this.setCloseLabel();
+    this.wheelState = {accum: 0, blocked: false};
     this.models = models;
     this.open = true;
     this.host.root.classList.add('has-fan');
@@ -112,6 +127,12 @@ export class FanOverlay {
     this.veil.remove();
     this.stage.remove();
     this.empty.remove();
+  }
+
+  private setCloseLabel() {
+    const label = forkLabel('ForkFeatures.FanClose', FAN_CLOSE_TEXT);
+    this.closeBtn.textContent = label;
+    this.closeBtn.setAttribute('aria-label', label);
   }
 
   private releaseUi() {
@@ -269,7 +290,11 @@ export class FanOverlay {
       }
 
       const scrollable = this.host.getScrollable();
-      if(!scrollable || scrollable.scrollTop > 2) {
+      if(!scrollable || !listIsAtTop(scrollable.scrollTop)) {
+        return;
+      }
+
+      if(!eventOnScrollable(event.target, scrollable)) {
         return;
       }
 
@@ -295,20 +320,34 @@ export class FanOverlay {
       }
 
       const scrollable = this.host.getScrollable();
-      if(!scrollable || scrollable.scrollTop > 2 || event.deltaY >= 0) {
-        this.wheelAccum = 0;
+      if(!scrollable) {
+        this.wheelState = {accum: 0, blocked: false};
         return;
       }
 
-      this.wheelAccum += -event.deltaY;
+      if(!eventOnScrollable(event.target, scrollable)) {
+        return;
+      }
+
+      const next = reduceFanWheel(this.wheelState, {
+        scrollTop: scrollable.scrollTop,
+        deltaY: event.deltaY
+      });
+      this.wheelState = {accum: next.accum, blocked: next.blocked};
       window.clearTimeout(this.wheelTimer);
       this.wheelTimer = window.setTimeout(() => {
-        this.wheelAccum = 0;
+        this.wheelState = {accum: 0, blocked: false};
         this.resetPull();
       }, 280);
-      this.applyPull(Math.min(FAN_PULL_THRESHOLD, this.wheelAccum * 0.22));
-      if(this.wheelAccum > FAN_WHEEL_OPEN) {
-        this.wheelAccum = 0;
+
+      if(!next.accum) {
+        this.applyPull(0);
+        return;
+      }
+
+      this.applyPull(Math.min(FAN_PULL_THRESHOLD, next.accum * 0.22));
+      if(next.open) {
+        this.wheelState = {accum: 0, blocked: false};
         this.show();
         this.resetPull();
       }
@@ -325,6 +364,13 @@ export class FanOverlay {
     }
 
     if(!this.dragging) {
+      return;
+    }
+
+    const scrollable = this.host.getScrollable();
+    if(scrollable && !listIsAtTop(scrollable.scrollTop)) {
+      this.dragging = false;
+      this.resetPull();
       return;
     }
 
@@ -364,7 +410,7 @@ export class FanOverlay {
 
   private resetPull() {
     this.pull = 0;
-    this.wheelAccum = 0;
+    this.wheelState = {accum: 0, blocked: this.wheelState.blocked};
     this.applyPull(0);
   }
 }

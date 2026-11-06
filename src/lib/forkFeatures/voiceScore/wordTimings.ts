@@ -74,16 +74,27 @@ export function wordIndexAtTime(words: VoiceScoreWord[], timeMs: number): number
 }
 
 /**
- * Seek target for a tapped word. HTMLMediaElement rounds `currentTime`, and
- * `startMs` is also the previous token's `endMs`, so seeking to the boundary
- * plays the previous word. Land a little way into this token instead.
+ * Seek target for a tapped word, in milliseconds.
+ *
+ * HTMLMediaElement.currentTime is seconds; opus/ogg voice notes snap to packet
+ * boundaries (~20ms). `startMs` is also the previous token's `endMs`, so a
+ * seek onto that boundary (or 12–40ms past it) still plays the previous word.
+ * Land around 40% into this token, never on the leading edge.
  */
 export function seekMsForWord(word: VoiceScoreWord): number {
-  const span = Math.max(0, word.endMs - word.startMs);
-  if(span <= 0) {
-    return Math.max(0, word.startMs);
+  const start = Math.max(0, word.startMs);
+  const end = word.endMs;
+  const span = end - start;
+  if(!(span > 0)) {
+    return start;
   }
 
-  const inward = Math.min(40, Math.max(12, span * 0.1));
-  return Math.min(word.startMs + inward, word.endMs - Math.min(6, span / 5));
+  const inward = Math.min(span * 0.45, Math.max(80, span * 0.4));
+  let time = start + inward;
+  const latest = end - Math.min(20, span * 0.08);
+  if(time >= latest) {
+    time = start + span * 0.5;
+  }
+
+  return Math.max(start, Math.min(time, latest));
 }

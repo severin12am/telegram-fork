@@ -57,6 +57,11 @@ export function reduceTranscribed(
 }
 
 function voiceDuration(row: TranscribableRow) {
+  const audio = (row as TranscribableRow & {audio?: HTMLMediaElement}).audio;
+  if(audio && Number.isFinite(audio.duration) && audio.duration > 0) {
+    return audio.duration;
+  }
+
   const media = getMediaFromMessage(row.message, true) as {duration?: number};
   return media?.duration || 0;
 }

@@ -1,6 +1,20 @@
 export type ThreadLink = {
   mid: number,
-  replyToMid?: number
+  replyToMid?: number,
+  replyToTopId?: number
+};
+
+type ReplyToLike = {
+  _?: string,
+  reply_to_msg_id?: number,
+  reply_to_top_id?: number
+};
+
+type MessageLike = {
+  mid?: number,
+  reply_to_mid?: number,
+  reply_to?: ReplyToLike,
+  replies?: {replies?: number}
 };
 
 /**
@@ -87,18 +101,124 @@ export function collectThreadMids(seedMid: number, links: ThreadLink[]): number[
   return ordered;
 }
 
-export function getReplyToMid(message: {
-  reply_to?: {
-    _?: string,
-    reply_to_msg_id?: number
+export function getReplyToMid(message: MessageLike | undefined): number | undefined {
+  if(!message) {
+    return undefined;
   }
-}): number | undefined {
+
+  if(typeof message.reply_to_mid === 'number' && message.reply_to_mid) {
+    return message.reply_to_mid;
+  }
+
   const replyTo = message.reply_to;
   if(replyTo?._ === 'messageReplyHeader' && replyTo.reply_to_msg_id) {
     return replyTo.reply_to_msg_id;
   }
 
+  if(replyTo && !replyTo._ && replyTo.reply_to_msg_id) {
+    return replyTo.reply_to_msg_id;
+  }
+
   return undefined;
+}
+
+export function getReplyToTopId(message: MessageLike | undefined): number | undefined {
+  if(!message) {
+    return undefined;
+  }
+
+  const replyTo = message.reply_to;
+  if(replyTo && replyTo.reply_to_top_id) {
+    return replyTo.reply_to_top_id;
+  }
+
+  return undefined;
+}
+
+export function linkFromMessage(message: MessageLike | undefined, mid?: number): ThreadLink | undefined {
+  const id = message?.mid ?? mid;
+  if(!id) {
+    return undefined;
+  }
+
+  return {
+    mid: id,
+    replyToMid: getReplyToMid(message),
+    replyToTopId: getReplyToTopId(message)
+  };
+}
+
+export function linksFromMessages(messages: MessageLike[]): ThreadLink[] {
+  const links: ThreadLink[] = [];
+  const seen = new Set<number>();
+  for(const message of messages) {
+    const link = linkFromMessage(message);
+    if(!link || seen.has(link.mid)) {
+      continue;
+    }
+
+    seen.add(link.mid);
+    links.push(link);
+  }
+
+  return links;
+}
+
+/**
+ * Take every loaded link that belongs to the same reply tree as `seed`:
+ * ancestors, descendants, and sibling branches that share a top id.
+ */
+export function expandLinksForSeed(seed: ThreadLink, all: ThreadLink[]): ThreadLink[] {
+  const byMid = new Map<number, ThreadLink>();
+  for(const link of all) {
+    byMid.set(link.mid, {
+      mid: link.mid,
+      replyToMid: link.replyToMid,
+      replyToTopId: link.replyToTopId
+    });
+  }
+
+  const seedLink: ThreadLink = {
+    mid: seed.mid,
+    replyToMid: seed.replyToMid ?? byMid.get(seed.mid)?.replyToMid,
+    replyToTopId: seed.replyToTopId ?? byMid.get(seed.mid)?.replyToTopId
+  };
+  byMid.set(seed.mid, seedLink);
+
+  let current = seedLink.replyToMid;
+  const walked = new Set<number>([seed.mid]);
+  while(current && !walked.has(current)) {
+    walked.add(current);
+    const parent = byMid.get(current);
+    if(!parent) {
+      byMid.set(current, {mid: current});
+      break;
+    }
+
+    current = parent.replyToMid;
+  }
+
+  const root = findThreadRoot(seed.mid, byMid);
+  const top = seedLink.replyToTopId || root;
+
+  let changed = true;
+  while(changed) {
+    changed = false;
+    for(const link of all) {
+      if(byMid.has(link.mid)) {
+        continue;
+      }
+
+      const pointsAtTree = !!(link.replyToMid && byMid.has(link.replyToMid));
+      const sharesTop = !!(link.replyToTopId && (link.replyToTopId === top || link.replyToTopId === seed.mid || link.replyToTopId === root));
+      if(pointsAtTree || sharesTop || link.mid === top) {
+        byMid.set(link.mid, link);
+        changed = true;
+      }
+    }
+  }
+
+  return [...byMid.values()];
 }
 
 /**
@@ -106,11 +226,7 @@ export function getReplyToMid(message: {
  * something already loaded replies to it, or a comment thread has replies.
  */
 export function messageHasReplyChain(
-  message: {
-    mid?: number,
-    reply_to?: {_?: string, reply_to_msg_id?: number},
-    replies?: {replies?: number}
-  },
+  message: MessageLike,
   links: ThreadLink[]
 ): boolean {
   if(getReplyToMid(message)) {
@@ -126,5 +242,5 @@ export function messageHasReplyChain(
     return false;
   }
 
-  return links.some((link) => link.replyToMid === mid);
+  return links.some((link) => link.replyToMid === mid || link.replyToTopId === mid);
 }

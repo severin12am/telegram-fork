@@ -10,8 +10,7 @@ import {logger} from '@lib/logger';
 import rootScope from '@lib/rootScope';
 import BubbleGroups from '@components/chat/bubbleGroups';
 import createDateBubble from '@components/chat/dateBubble';
-import {isForkFeatureEnabled} from '@lib/forkFeatures/flags';
-import {closeReplyLoom, destroyReplyLoom, openReplyLoom, refreshReplyLoom} from '@lib/forkFeatures/replyLoom/sheet';
+import {closeReplyLoom, destroyReplyLoom, refreshReplyLoom} from '@lib/forkFeatures/replyLoom/sheet';
 import {attachReplyLoomPress} from '@lib/forkFeatures/replyLoom/press';
 import {destroyYearRail, ensureYearRail, resetYearRail} from '@lib/forkFeatures/yearRail/loupe';
 import showDatePickerPopup from '@components/popups/datePicker';
@@ -4410,15 +4409,6 @@ export default class ChatBubbles {
 
         if(replyTo.reply_to_msg_deleted) {
           toastNew({langPackKey: 'DeletedMessageToast'});
-          return;
-        }
-
-        if(isForkFeatureEnabled('replyLoom') && message?._ === 'message') {
-          openReplyLoom({
-            container: this.container,
-            chatInner: this.chatInner,
-            chat: this.chat
-          }, message);
           return;
         }
 

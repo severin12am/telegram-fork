@@ -88,7 +88,7 @@ import uiNotificationsManager from '@lib/uiNotificationsManager';
 import {renderFoldersSidebarContent} from '@components/sidebarLeft/foldersSidebarContent';
 import SolidJSHotReloadGuardProvider, {registerHotReloadGuard} from '@lib/solidjs/hotReloadGuardProvider';
 import {AppChatFoldersTab} from '@components/solidJsTabs/tabs';
-import {installFan} from '@lib/forkFeatures/fan/overlay';
+import {getFanScrollable, installFan} from '@lib/forkFeatures/fan/overlay';
 import {SliderSuperTabConstructable} from '@components/sliderTab';
 import showSliderPopup from '@components/sliderPopup';
 import {AppEditFolderTab} from '@components/solidJsTabs/tabs';
@@ -174,7 +174,10 @@ export class AppSidebarLeft extends SidebarSlider {
     this.chatListContainer = document.getElementById('chatlist-container');
     installFan({
       root: this.chatListContainer,
-      getScrollable: () => this.chatListContainer.querySelector<HTMLElement>('.scrollable'),
+      getScrollable: () => getFanScrollable(
+        this.chatListContainer,
+        appDialogsManager.xd?.scrollable?.container
+      ),
       openPeer: (peerId) => {
         appImManager.setInnerPeer({peerId});
       }

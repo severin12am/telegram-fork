@@ -1,7 +1,10 @@
 import './playground.scss';
-import {estimateWordTimings, seekMsForWord, wordClassAtTime} from '@lib/forkFeatures/voiceScore/wordTimings';
-import {collectThreadMids} from '@lib/forkFeatures/replyLoom/collectThread';
+import {estimateWordTimings, wordClassAtTime, wordIndexAtTime} from '@lib/forkFeatures/voiceScore/wordTimings';
+import {clickedWordStartsInside, durationMsFromSeconds, seekAudioToWord} from '@lib/forkFeatures/voiceScore/seekAudio';
+import {collectThreadMids, expandLinksForSeed, linksFromMessages} from '@lib/forkFeatures/replyLoom/collectThread';
+import {FAN_CLOSE_TEXT, FAN_WHEEL_OPEN} from '@lib/forkFeatures/fan/overlayConstants';
 import {fanPoses} from '@lib/forkFeatures/fan/collectUnread';
+import {reduceFanWheel} from '@lib/forkFeatures/fan/gesture';
 import {formatYearRailLabel} from '@lib/forkFeatures/yearRail/focusMessage';
 
 document.title = 'WebK extra features';
@@ -46,40 +49,49 @@ function bubble(side: 'in' | 'out', text: string, time: string, extra?: (bub: HT
 
 function voiceScore(host: HTMLElement) {
   const spoken = 'The cabin is past the mill, not the first turn. Stay on the river road until you see the green planter, then the lockbox is under it. The code is four nine two one.';
-  const durationMs = 18000;
+  const durationSec = 18;
+  const durationMs = durationMsFromSeconds(durationSec);
   const words = estimateWordTimings(spoken, durationMs);
   const p = phone('Maya Chen', 'online');
   host.append(p.wrap);
 
+  const audio = {currentTime: 0, duration: durationSec};
   const voice = el('div', 'pg-vrow');
   const play = el('button', 'pg-play', '▶');
   play.type = 'button';
   voice.append(play);
   const col = el('div');
-  col.append(el('div', 'pg-pv', '0:18'), el('div', 'pg-meta', 'Voice Score · tap a word to jump'));
+  const clock = el('div', 'pg-pv', '0:18');
+  clock.dataset.forkProbe = 'voice-clock';
+  col.append(clock, el('div', 'pg-meta', 'Voice Score · tap a word to jump'));
   voice.append(col);
+
+  const status = el('div', 'pg-meta');
+  status.dataset.forkProbe = 'voice-status';
+  status.textContent = 'click a word';
 
   const body = el('div', 'audio-transcribed-text');
   const score = el('span', 'voice-score-words');
   score.dataset.forkFeature = 'voice-score';
-  const buttons = words.map((word) => {
+  const buttons = words.map((word, index) => {
     const button = el('button', 'voice-score-word', word.word);
     button.type = 'button';
+    button.dataset.wordIndex = String(index);
     score.append(button, document.createTextNode(word.trailing));
     return button;
   });
   body.append(score);
 
   p.stream.append(bubble('in', '', '6:11 PM', (bub) => {
-    bub.append(voice, body);
+    bub.append(voice, body, status);
   }));
 
   let timer = 0;
   let started = 0;
-  let offset = 0;
   let playing = false;
 
   const paint = (timeMs: number) => {
+    clock.textContent = (timeMs / 1000).toFixed(2) + 's / ' + durationSec + 's';
     buttons.forEach((button, i) => {
       const cls = wordClassAtTime(words[i], timeMs);
       button.classList.toggle('voice-score-word-now', cls === 'now');
@@ -88,7 +100,7 @@ function voiceScore(host: HTMLElement) {
   };
 
   const tick = () => {
-    const timeMs = offset + (playing ? performance.now() - started : 0);
+    const timeMs = audio.currentTime * 1000 + (playing ? performance.now() - started : 0);
     paint(timeMs);
     if(playing && timeMs < durationMs) {
       timer = requestAnimationFrame(tick);
@@ -99,7 +111,7 @@ function voiceScore(host: HTMLElement) {
   };
 
   const seek = (ms: number) => {
-    offset = ms;
+    audio.currentTime = ms / 1000;
     started = performance.now();
     playing = true;
     play.textContent = '❚❚';
@@ -109,50 +121,72 @@ function voiceScore(host: HTMLElement) {
 
   play.onclick = () => {
     if(playing) {
-      offset += performance.now() - started;
+      audio.currentTime += (performance.now() - started) / 1000;
       playing = false;
       play.textContent = '▶';
       cancelAnimationFrame(timer);
       return;
     }
 
-    seek(offset);
+    seek(audio.currentTime * 1000);
   };
 
   buttons.forEach((button, i) => {
-    button.onclick = () => seek(seekMsForWord(words[i]));
+    button.onclick = () => {
+      const inside = clickedWordStartsInside(words, i, audio);
+      const t = seekAudioToWord(audio, words[i]);
+      const idx = wordIndexAtTime(words, t * 1000);
+      status.textContent = `word ${i} → ${t.toFixed(3)}s (index ${idx})${inside ? '' : ' FAIL'}`;
+      status.dataset.wordIndex = String(idx);
+      seek(t * 1000);
+    };
   });
 
   seek(0);
 }
 
 function replyLoom(host: HTMLElement) {
-  const links = [
-    {mid: 1},
-    {mid: 2, replyToMid: 1},
-    {mid: 3, replyToMid: 1},
-    {mid: 4, replyToMid: 1}
+  const messages = [
+    {mid: 100},
+    {mid: 101, reply_to_mid: 100, reply_to: {_: 'messageReplyHeader', reply_to_msg_id: 100, reply_to_top_id: 100}},
+    {mid: 102, reply_to_mid: 101, reply_to: {_: 'messageReplyHeader', reply_to_msg_id: 101, reply_to_top_id: 100}},
+    {mid: 103, reply_to_mid: 102, reply_to: {_: 'messageReplyHeader', reply_to_msg_id: 102, reply_to_top_id: 100}},
+    {mid: 104, reply_to_mid: 101, reply_to: {_: 'messageReplyHeader', reply_to_msg_id: 101, reply_to_top_id: 100}},
+    {mid: 105, reply_to_mid: 100, reply_to: {_: 'messageReplyHeader', reply_to_msg_id: 100, reply_to_top_id: 100}}
   ];
-  const thread = collectThreadMids(4, links);
-  const p = phone('Cabin weekend', 'Maya, Jules, Alex');
+  const links = expandLinksForSeed({mid: 103, replyToMid: 102, replyToTopId: 100}, linksFromMessages(messages));
+  const thread = collectThreadMids(103, links);
+  const p = phone('Cabin weekend', 'Maya, Jules, Alex, Sam');
   host.append(p.wrap);
+  p.chat.style.setProperty('--chat-topbar-height', '0px');
+  p.chat.style.setProperty('--pinned-floating-height', '64px');
+  p.chat.style.setProperty('--chat-padding-bottom', '0px');
 
-  const rows = [
-    ['in', 'Host said the lockbox code is 4921, under the green planter.', '8:02 AM'],
-    ['out', 'I will write it on paper in the car.', '8:14 AM'],
-    ['in', 'Don\'t put the code in the car. I will keep it.', '8:28 AM'],
-    ['out', 'Leaving the station at 4.', '5:12 PM']
-  ] as const;
+  const pinned = el('div', 'pg-pinned');
+  pinned.dataset.forkProbe = 'pinned-bar';
+  pinned.append(el('b', '', 'Pinned Message'), el('span', '', 'Lockbox under the green planter'));
+  p.chat.prepend(pinned);
 
-  rows.forEach((item, index) => {
-    const row = bubble(item[0], item[1], item[2], (bub) => {
-      if(index === 3) {
-        const q = el('div', 'pg-quote', 'Maya Chen — Then text me when you are an hour out.');
+  const copy = [
+    {mid: 100, side: 'in' as const, name: 'Maya Chen', text: 'Host said the lockbox code is 4921, under the green planter.', time: '8:02 AM'},
+    {mid: 101, side: 'out' as const, name: 'You', text: 'I will write it on paper in the car.', time: '8:14 AM'},
+    {mid: 102, side: 'in' as const, name: 'Jules Adeyemi', text: 'Don\'t put the code in the car. I will keep it.', time: '8:28 AM'},
+    {mid: 103, side: 'in' as const, name: 'Alex Park', text: 'Then text me when you are an hour out.', time: '8:41 AM'},
+    {mid: 104, side: 'out' as const, name: 'You', text: 'Jules, I left the kettle by the door.', time: '8:44 AM'},
+    {mid: 105, side: 'in' as const, name: 'Sam Okonkwo', text: 'I am on the 4:10. Save me a bunk.', time: '9:03 AM'}
+  ];
+
+  copy.forEach((item) => {
+    const row = bubble(item.side, item.text, item.time, (bub) => {
+      if(item.mid === 103) {
+        const q = el('div', 'pg-quote', 'Jules Adeyemi — Don\'t put the code in the car.');
+        q.dataset.forkProbe = 'quote-click';
+        q.tabIndex = 0;
         bub.prepend(q);
       }
     });
-    row.dataset.mid = String(index + 1);
-    if(index === 1 || index === 2) row.classList.add('reply-loom-dim');
+    row.dataset.mid = String(item.mid);
+    if(item.mid !== 100 && item.mid !== 103) row.classList.add('reply-loom-dim');
     p.stream.append(row);
   });
 
@@ -164,14 +198,12 @@ function replyLoom(host: HTMLElement) {
   back.type = 'button';
   head.append(back);
   const body = el('div', 'reply-loom-sheet-body');
-  const copy = [
-    {mid: 1, side: 'in' as const, text: 'Host said the lockbox code is 4921, under the green planter.', time: '8:02 AM'},
-    {mid: 4, side: 'out' as const, text: 'Leaving the station at 4. I will text you.', time: '5:12 PM'}
-  ].filter((item) => thread.includes(item.mid));
-  copy.forEach((item) => {
+  body.dataset.forkProbe = 'thread-body';
+  copy.filter((item) => thread.includes(item.mid)).forEach((item) => {
     const row = el('div', 'reply-loom-row' + (item.side === 'out' ? ' is-out' : ''));
+    row.dataset.mid = String(item.mid);
     const bub = el('div', 'reply-loom-bubble' + (item.side === 'out' ? ' is-out' : ''));
-    bub.append(el('div', 'reply-loom-text', item.text), el('span', 'reply-loom-meta', item.time));
+    bub.append(el('span', 'reply-loom-sender', item.name), el('div', 'reply-loom-text', item.text), el('span', 'reply-loom-meta', item.time));
     row.append(bub);
     body.append(row);
   });
@@ -191,8 +223,16 @@ function fan(host: HTMLElement) {
     ['C', '#5b7c99', 'Cabin weekend', 'Jules: I packed the kettle.', '8'],
     ['S', '#c46b4a', 'Sam Okonkwo', 'Are you on the 4:10?', '2']
   ];
+  const extra = ['Ada', 'Ben', 'Cleo', 'Drew', 'Eve', 'Finn', 'Gia', 'Hank', 'Ivy', 'Jon', 'Kim', 'Leo', 'Mo', 'Nia', 'Oli', 'Pip', 'Quinn', 'Rae', 'Sky', 'Tess', 'Uma', 'Val', 'Wes', 'Xan', 'Yara', 'Zed'];
   const p = phone('Chats', '4 unread');
   host.append(p.wrap);
+  p.stream.classList.add('scrollable', 'scrollable-y');
+  p.stream.dataset.forkProbe = 'fan-list';
+
+  const probe = el('div', 'pg-probe');
+  probe.dataset.forkProbe = 'fan-wheel';
+  probe.textContent = 'scrollTop 0 · blocked no · open no';
+  p.wrap.prepend(probe);
 
   people.forEach((person) => {
     const row = el('div', 'pg-dlg');
@@ -208,10 +248,32 @@ function fan(host: HTMLElement) {
     row.append(av, main);
     p.stream.append(row);
   });
+  extra.forEach((name, i) => {
+    const row = el('div', 'pg-dlg');
+    const av = el('div', 'pg-ava', name[0]);
+    av.style.background = '#8d969e';
+    const main = el('div');
+    main.append(el('span', 'pg-nm', name), el('div', 'pg-pv', 'read · row ' + (i + 5)));
+    row.append(av, main);
+    p.stream.append(row);
+  });
 
-  const veil = el('div', 'fan-veil is-open');
-  const stage = el('div', 'fan-stage is-open');
+  const veil = el('div', 'fan-veil');
+  const stage = el('div', 'fan-stage');
   stage.dataset.forkFeature = 'fan';
+  const close = el('button', 'fan-close', FAN_CLOSE_TEXT);
+  close.type = 'button';
+  close.dataset.forkAction = 'fan-close';
+  const openFan = () => {
+    veil.classList.add('is-open');
+    stage.classList.add('is-open');
+  };
+  const closeFan = () => {
+    veil.classList.remove('is-open');
+    stage.classList.remove('is-open');
+  };
+  close.onclick = closeFan;
+  stage.append(close);
   const poses = fanPoses(people.length);
   people.forEach((person, index) => {
     const card = el('button', 'fan-card');
@@ -227,15 +289,26 @@ function fan(host: HTMLElement) {
     const copy = el('div', 'fan-card-copy');
     copy.append(el('b', '', person[2]), el('p', '', person[3]));
     card.append(av, copy, el('span', 'fan-card-badge', person[4]));
-    card.onclick = () => {
-      stage.querySelectorAll('.fan-card').forEach((node) => {
-        if(node !== card) (node as HTMLElement).style.opacity = '0';
-      });
-      veil.classList.remove('is-open');
-    };
+    card.onclick = closeFan;
     stage.append(card);
   });
   p.chat.append(veil, stage);
+  openFan();
+
+  let wheel = {accum: 0, blocked: false};
+  p.stream.addEventListener('wheel', (event) => {
+    if(stage.classList.contains('is-open')) {
+      return;
+    }
+
+    const next = reduceFanWheel(wheel, {scrollTop: p.stream.scrollTop, deltaY: event.deltaY}, FAN_WHEEL_OPEN);
+    wheel = {accum: next.accum, blocked: next.blocked};
+    probe.textContent = `scrollTop ${p.stream.scrollTop | 0} · blocked ${next.blocked ? 'yes' : 'no'} · open ${next.open ? 'yes' : 'no'} · accum ${next.accum | 0}`;
+    if(next.open) {
+      openFan();
+      wheel = {accum: 0, blocked: false};
+    }
+  }, {passive: true});
 }
 
 function yearRail(host: HTMLElement) {

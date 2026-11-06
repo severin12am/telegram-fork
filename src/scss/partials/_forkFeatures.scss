@@ -41,8 +41,13 @@
 
 .reply-loom-sheet {
   position: absolute;
-  inset: 18% 0 0;
-  z-index: 6;
+  // Sit in `.chat`, below the topbar and any pinned plate (those live in a
+  // higher stacking context than `.bubbles`, so a sheet inside bubbles can
+  // never paint over them).
+  top: calc(var(--chat-topbar-height, 3rem) + var(--pinned-floating-height, 0px) + 4px);
+  inset-inline: 0;
+  bottom: var(--chat-padding-bottom, 0px);
+  z-index: 4;
   display: flex;
   flex-direction: column;
   background: var(--surface-color);
@@ -119,6 +124,14 @@
   }
 }
 
+.reply-loom-sender {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--primary-color);
+  margin-bottom: 2px;
+}
+
 .reply-loom-text {
   font-size: var(--messages-text-size, 16px);
   line-height: 1.3125;
@@ -144,7 +157,7 @@
   color: var(--secondary-text-color);
 }
 
-.chatlist-container.has-fan > .scrollable {
+.chatlist-container.has-fan .scrollable {
   pointer-events: none;
 }
 
@@ -182,24 +195,32 @@
 .fan-close {
   appearance: none;
   position: absolute;
-  top: 12px;
-  inset-inline-end: 12px;
-  z-index: 11;
+  bottom: 20px;
+  left: 50%;
+  z-index: 12;
   margin: 0;
-  padding: 8px 14px;
+  padding: 11px 22px;
+  min-width: 148px;
   border: 0;
-  border-radius: 18px;
-  background: var(--surface-color);
-  color: var(--primary-color);
+  border-radius: 10px;
+  background: var(--primary-color);
+  color: #fff;
   font: inherit;
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 600;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, .16);
+  line-height: 1.2;
+  letter-spacing: .01em;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, .28);
   cursor: pointer;
   pointer-events: none;
+  transform: translateX(-50%);
 
   .fan-stage.is-open & {
     pointer-events: auto;
+  }
+
+  &:active {
+    filter: brightness(.94);
   }
 }
 
