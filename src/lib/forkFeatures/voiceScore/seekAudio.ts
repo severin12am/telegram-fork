@@ -1,4 +1,4 @@
-import {seekIsNearOnset, seekMsForWord, VoiceScoreWord, wordIndexAtTime, WORD_ONSET_SEEK_SLACK_MS} from '@lib/forkFeatures/voiceScore/wordTimings';
+import {prerollMsForWord, seekIsNearOnset, seekMsForWord, VoiceScoreWord, wordIndexAtTime, WORD_ONSET_SEEK_SLACK_MS} from '@lib/forkFeatures/voiceScore/wordTimings';
 
 /**
  * Telegram's voice `duration` and HTMLMediaElement.currentTime are both in
@@ -12,8 +12,8 @@ export function durationMsFromSeconds(durationSec: number): number {
   return durationSec * 1000;
 }
 
-export function seekSecondsForWord(word: VoiceScoreWord): number {
-  return seekMsForWord(word) / 1000;
+export function seekSecondsForWord(word: VoiceScoreWord, previous?: VoiceScoreWord): number {
+  return seekMsForWord(word, previous) / 1000;
 }
 
 /**
@@ -38,47 +38,61 @@ type SeekableAudio = {
   play?: () => unknown
 };
 
+function minAllowedSec(word: VoiceScoreWord, previous?: VoiceScoreWord): number {
+  const onset = word.startMs / 1000;
+  return Math.max(0, onset - prerollMsForWord(word, previous) / 1000);
+}
+
 /**
- * Seek `audio` so playback starts at the clicked word's own speech onset
- * (plus a few milliseconds so an opus packet snap cannot fall earlier).
+ * Seek `audio` so playback starts on the clicked word's speech onset
+ * (or a ≤50ms silence preroll that does not include the previous word).
  */
-export function seekAudioToWord(audio: SeekableAudio, word: VoiceScoreWord): number {
+export function seekAudioToWord(
+  audio: SeekableAudio,
+  word: VoiceScoreWord,
+  previous?: VoiceScoreWord
+): number {
   const durationSec = Number.isFinite(audio.duration) && (audio.duration as number) > 0 ?
     audio.duration as number :
     undefined;
-  const start = word.startMs / 1000;
-  const end = Math.max(start, word.endMs / 1000);
-  const span = Math.max(0, end - start);
-  let seconds = toMediaSeconds(seekSecondsForWord(word), durationSec);
+  const onset = word.startMs / 1000;
+  const end = Math.max(onset, word.endMs / 1000);
+  const span = Math.max(0, end - onset);
+  const minAllowed = minAllowedSec(word, previous);
+  let seconds = toMediaSeconds(seekSecondsForWord(word, previous), durationSec);
 
-  if(seconds < start) {
-    seconds = start + Math.min(0.02, Math.max(0.008, span * 0.02));
+  if(seconds < minAllowed) {
+    seconds = minAllowed;
   }
 
-  if(seconds > start + WORD_ONSET_SEEK_SLACK_MS / 1000) {
-    seconds = start + Math.min(0.04, WORD_ONSET_SEEK_SLACK_MS / 1000 - 0.01);
+  if(seconds > onset + WORD_ONSET_SEEK_SLACK_MS / 1000) {
+    seconds = onset + Math.min(0.02, WORD_ONSET_SEEK_SLACK_MS / 1000 - 0.01);
   }
 
   if(seconds >= end && span > 0) {
-    seconds = Math.max(start, end - Math.min(0.02, span / 5));
+    seconds = Math.max(minAllowed, onset);
   }
 
   let target = seconds;
   for(let i = 0; i < 8; i++) {
     audio.currentTime = target;
-    if(audio.currentTime >= start) {
+    if(audio.currentTime >= minAllowed - 1e-4) {
       break;
     }
 
-    const deficit = start - audio.currentTime;
+    const deficit = minAllowed - audio.currentTime;
     target = Math.min(
-      start + WORD_ONSET_SEEK_SLACK_MS / 1000 - 0.005,
+      onset + WORD_ONSET_SEEK_SLACK_MS / 1000 - 0.005,
       target + deficit + 0.01
     );
   }
 
-  if(audio.currentTime > start + WORD_ONSET_SEEK_SLACK_MS / 1000 && span > WORD_ONSET_SEEK_SLACK_MS / 1000) {
-    audio.currentTime = start + 0.04;
+  if(audio.currentTime > onset + WORD_ONSET_SEEK_SLACK_MS / 1000 && span > WORD_ONSET_SEEK_SLACK_MS / 1000) {
+    audio.currentTime = onset + 0.012;
+  }
+
+  if(previous && audio.currentTime * 1000 + 1 < previous.endMs) {
+    audio.currentTime = Math.max(minAllowed, onset);
   }
 
   return audio.currentTime;
@@ -94,10 +108,14 @@ export function clickedWordStartsInside(
     return false;
   }
 
-  const timeSec = seekAudioToWord(audio, word);
+  const previous = index > 0 ? words[index - 1] : undefined;
+  const timeSec = seekAudioToWord(audio, word, previous);
   const timeMs = timeSec * 1000;
-  return wordIndexAtTime(words, timeMs) === index &&
-    seekIsNearOnset(word, timeMs) &&
-    timeMs >= word.startMs &&
+  if(previous && timeMs + 1 < previous.endMs) {
+    return false;
+  }
+
+  return wordIndexAtTime(words, Math.max(timeMs, word.startMs)) === index &&
+    seekIsNearOnset(word, timeMs, WORD_ONSET_SEEK_SLACK_MS, previous) &&
     (word.endMs <= word.startMs || timeMs < word.endMs);
 }

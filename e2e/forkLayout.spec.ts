@@ -24,13 +24,17 @@ test.describe('real chat layout fixture', () => {
         return report && report.sheet && report.sheet.height > 40;
       });
 
+      await page.waitForFunction(() => {
+        const photo = document.querySelector('[data-fork-probe="thread-photo"]') as HTMLImageElement | null;
+        return !!photo && photo.naturalWidth >= 400;
+      });
       const report = await page.evaluate(() => (window as any).__forkLayout);
       expect(report.overflow.left).toBeGreaterThanOrEqual(-1);
       expect(report.overflow.right).toBeLessThanOrEqual(1);
       expect(report.overflow.top).toBeGreaterThanOrEqual(-1);
       expect(report.overflow.bottom).toBeLessThanOrEqual(1);
       expect(report.sheet.top).toBeGreaterThanOrEqual(report.pinnedBottom - 2);
-      expect(report.sheet.bottom).toBeLessThanOrEqual(report.inputTop + 2);
+      expect(report.sheet.bottom).toBeLessThanOrEqual(Math.min(report.inputTop, report.replyTop) + 2);
       if(viewport.width > 925) {
         expect(report.sheet.left).toBeGreaterThanOrEqual(report.sidebarRight - 2);
         expect(Math.abs(report.sheet.right - viewport.width)).toBeLessThanOrEqual(2);
@@ -41,10 +45,18 @@ test.describe('real chat layout fixture', () => {
 
       const rows = page.locator('[data-fork-probe="thread-body"] .reply-loom-row');
       await expect(rows).toHaveCount(6);
+      await expect(page.locator('[data-fork-probe="thread-close"]')).toBeVisible();
+      expect(report.participants).toBeGreaterThanOrEqual(3);
+      expect(report.depths.filter((row: {depth: string}) => Number(row.depth) > 0).length).toBeGreaterThanOrEqual(3);
+      expect(report.quotes.length).toBeGreaterThanOrEqual(3);
+      expect(report.photo.naturalWidth).toBeGreaterThanOrEqual(400);
+
+      await page.keyboard.press('Escape');
+      await expect(page.locator('[data-fork-probe="thread-sheet"]')).not.toHaveClass(/is-open/);
     });
   }
 
-  test('clicking Они after a pause starts within 100ms of the speech onset', async({page}) => {
+  test('clicking персиковые after a pause starts on that word, not розовые', async({page}) => {
     await page.setViewportSize({width: 1280, height: 800});
     await page.goto(layout + '?view=voice');
     const words = page.locator('.voice-score-word');
@@ -54,15 +66,17 @@ test.describe('real chat layout fixture', () => {
       return root?.getAttribute('data-aligned') === 'speech';
     });
 
-    const oniIndex = await page.evaluate(() => (window as any).__forkLayout.oniIndex);
-    const onset2Ms = await page.evaluate(() => (window as any).__forkLayout.onset2Ms);
-    expect(oniIndex).toBeGreaterThan(0);
-    await words.nth(oniIndex).click();
+    const meta = await page.evaluate(() => (window as any).__forkLayout);
+    expect(meta.persikIndex).toBe(13);
+    await words.nth(meta.persikIndex).click();
     const status = page.locator('[data-fork-probe="voice-status"]');
-    await expect(status).toHaveAttribute('data-word-index', String(oniIndex));
+    await expect(status).toHaveAttribute('data-word-index', '13');
     const delta = Number(await status.getAttribute('data-delta-ms'));
     const currentMs = Number(await status.getAttribute('data-current-ms'));
+    const truthMs = Number(await status.getAttribute('data-truth-ms'));
     expect(delta).toBeLessThan(100);
-    expect(Math.abs(currentMs - onset2Ms)).toBeLessThan(100);
+    expect(Math.abs(currentMs - truthMs)).toBeLessThan(100);
+    const rozovyeEnd = meta.truth[meta.rozovyeIndex].endMs;
+    expect(currentMs).toBeGreaterThanOrEqual(rozovyeEnd - 1);
   });
 });

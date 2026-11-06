@@ -1,16 +1,20 @@
 import {Message, User} from '@layer';
 import apiManagerProxy from '@lib/apiManagerProxy';
 import liteMode from '@helpers/liteMode';
+import Icon from '@components/icon';
+import {getMiddleware, MiddlewareHelper} from '@helpers/middleware';
 import {
-  collectThreadMids,
+  collectThreadTree,
   expandLinksForSeed,
   getReplyToMid,
   getReplyToTopId,
   linkFromMessage,
   linksFromMessages,
   messageHasReplyChain,
+  ThreadLayoutItem,
   ThreadLink
 } from '@lib/forkFeatures/replyLoom/collectThread';
+import {attachThreadMedia, ThreadMediaMessage} from '@lib/forkFeatures/replyLoom/threadMedia';
 import {isForkFeatureEnabled} from '@lib/forkFeatures/flags';
 import {forkLabel} from '@lib/forkFeatures/label';
 import {layoutReplyLoomSheet} from '@lib/forkFeatures/replyLoom/fitSheet';
@@ -30,6 +34,7 @@ export type ReplyLoomHost = {
 };
 
 const DIM_CLASS = 'reply-loom-dim';
+const PEER_COLORS = ['red', 'orange', 'violet', 'green', 'cyan', 'pink', 'blue'] as const;
 
 function messageText(message: any): string {
   if(!message) {
@@ -55,7 +60,7 @@ function messageText(message: any): string {
   }
 
   if(media?._ === 'messageMediaPhoto') {
-    return 'Photo';
+    return '';
   }
 
   if(media?._ === 'messageMediaGeo' || media?._ === 'messageMediaGeoLive') {
@@ -97,6 +102,20 @@ function senderLabel(message: Message.message | undefined): string {
   }
 
   return 'title' in peer ? (peer.title || '') : '';
+}
+
+function senderPeerId(message: Message.message | undefined): number {
+  return Number(message?.fromId || message?.peerId || 0) || 0;
+}
+
+function initials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if(!parts.length) {
+    return '';
+  }
+
+  const letters = parts.slice(0, 2).map((part) => part[0]).join('');
+  return letters.toUpperCase();
 }
 
 function cachedHistoryMessages(storageKey: string | undefined, peerId: PeerId): any[] {
@@ -184,11 +203,24 @@ function collectAllLinks(host: ReplyLoomHost, seed: Message.message): ThreadLink
 export class ReplyLoomController {
   private sheet: HTMLElement;
   private body: HTMLElement;
+  private subtitle: HTMLElement;
   private open = false;
   private seedMid = 0;
   private chatEl: HTMLElement | null = null;
   private resizeObserver?: ResizeObserver;
+  private middlewareHelper: MiddlewareHelper;
   private onViewport = () => this.layout();
+  private onKeyDown = (event: KeyboardEvent) => {
+    if(!this.open) {
+      return;
+    }
+
+    if(event.key === 'Escape' || event.key === 'Esc') {
+      event.preventDefault();
+      event.stopPropagation();
+      this.close();
+    }
+  };
 
   public rebind(host: ReplyLoomHost) {
     this.host = host;
@@ -206,26 +238,35 @@ export class ReplyLoomController {
   }
 
   constructor(private host: ReplyLoomHost) {
+    this.middlewareHelper = getMiddleware();
     this.sheet = document.createElement('div');
     this.sheet.className = 'reply-loom-sheet';
     this.sheet.dataset.forkFeature = 'reply-loom';
     this.sheet.dataset.forkProbe = 'thread-sheet';
     this.sheet.setAttribute('role', 'dialog');
+    this.sheet.setAttribute('aria-modal', 'true');
     this.sheet.setAttribute('aria-label', 'Thread');
 
     const head = document.createElement('div');
     head.className = 'reply-loom-sheet-head';
 
+    const close = document.createElement('button');
+    close.type = 'button';
+    close.className = 'btn-icon reply-loom-sheet-close';
+    close.dataset.forkProbe = 'thread-close';
+    close.setAttribute('aria-label', 'Close');
+    close.append(Icon('close'));
+    close.addEventListener('click', () => this.close());
+
+    const titles = document.createElement('div');
+    titles.className = 'reply-loom-sheet-titles';
     const title = document.createElement('b');
     title.textContent = forkLabel('ForkFeatures.Thread', 'Thread');
+    this.subtitle = document.createElement('span');
+    this.subtitle.className = 'reply-loom-sheet-sub';
+    titles.append(title, this.subtitle);
 
-    const back = document.createElement('button');
-    back.type = 'button';
-    back.className = 'reply-loom-sheet-back';
-    back.textContent = forkLabel('ForkFeatures.BackToChat', 'Back to chat');
-    back.addEventListener('click', () => this.close());
-
-    head.append(title, back);
+    head.append(close, titles);
 
     this.body = document.createElement('div');
     this.body.className = 'reply-loom-sheet-body';
@@ -260,15 +301,21 @@ export class ReplyLoomController {
     this.chatEl = this.host.container.closest('.chat') || this.mountParent();
     this.chatEl.classList.add('has-reply-loom');
     this.host.container.classList.add('has-reply-loom');
-    this.layout();
     this.sheet.classList.add('is-open');
-    requestAnimationFrame(() => this.layout());
     if(!liteMode.isAvailable('motion')) {
       this.sheet.classList.add('no-motion');
     }
 
+    document.addEventListener('keydown', this.onKeyDown, true);
+
     const replyTo = this.host.chat.input.getChatInputReplyToFromMessage?.(message) || {replyToMsgId: message.mid};
-    this.host.chat.input.initMessageReply(replyTo);
+    const armed = this.host.chat.input.initMessageReply(replyTo);
+    this.layout();
+    requestAnimationFrame(() => this.layout());
+    Promise.resolve(armed).finally(() => {
+      this.layout();
+      requestAnimationFrame(() => this.layout());
+    });
   }
 
   public refresh() {
@@ -291,12 +338,15 @@ export class ReplyLoomController {
     this.sheet.classList.remove('is-open');
     this.host.container.classList.remove('has-reply-loom');
     this.chatEl?.classList.remove('has-reply-loom');
+    document.removeEventListener('keydown', this.onKeyDown, true);
+    this.middlewareHelper.clean();
     this.clearDim();
   }
 
   public destroy() {
     this.close();
     this.unwatchLayout();
+    document.removeEventListener('keydown', this.onKeyDown, true);
     this.sheet.remove();
   }
 
@@ -319,17 +369,32 @@ export class ReplyLoomController {
   private watchLayout() {
     if(typeof ResizeObserver !== 'undefined' && !this.resizeObserver) {
       this.resizeObserver = new ResizeObserver(() => this.layout());
-      const chat = this.host.container.closest('.chat') || this.host.container;
-      this.resizeObserver.observe(chat);
-      this.resizeObserver.observe(this.mountParent());
-      const bubbles = chat.querySelector('.bubbles');
-      if(bubbles) {
-        this.resizeObserver.observe(bubbles);
-      }
-      const sidebar = document.getElementById('column-left');
-      if(sidebar) {
-        this.resizeObserver.observe(sidebar);
-      }
+    }
+
+    const observer = this.resizeObserver;
+    if(!observer) {
+      window.addEventListener('resize', this.onViewport);
+      return;
+    }
+
+    const chat = this.host.container.closest('.chat') || this.host.container;
+    observer.observe(chat);
+    observer.observe(this.mountParent());
+    const bubbles = chat.querySelector('.bubbles');
+    if(bubbles) {
+      observer.observe(bubbles);
+    }
+    const sidebar = document.getElementById('column-left');
+    if(sidebar) {
+      observer.observe(sidebar);
+    }
+    const input = chat.querySelector('.chat-input');
+    if(input) {
+      observer.observe(input);
+    }
+    const reply = chat.querySelector('.reply-wrapper');
+    if(reply) {
+      observer.observe(reply);
     }
 
     window.addEventListener('resize', this.onViewport);
@@ -342,63 +407,104 @@ export class ReplyLoomController {
   }
 
   private render(seed: Message.message) {
+    this.middlewareHelper.clean();
     const getMessage = (mid: number) => this.host.chat.getMessage(mid);
     const links = collectAllLinks(this.host, seed);
-    const mids = collectThreadMids(seed.mid, links);
+    const tree = collectThreadTree(seed.mid, links);
     this.body.replaceChildren();
-    this.applyDim(new Set(mids));
+    this.body.dataset.forkProbe = 'thread-body';
+    this.body.dataset.tree = '1';
+    this.applyDim(new Set(tree.map((item) => item.mid)));
 
-    for(const mid of mids) {
-      const message = getMessage(mid) as Message.message;
-      this.body.append(this.row(message, mid));
+    const names = new Set<string>();
+    for(const item of tree) {
+      const name = senderLabel(getMessage(item.mid) as Message.message);
+      if(name) {
+        names.add(name);
+      }
     }
 
-    this.body.scrollTop = this.body.scrollHeight;
+    const people = names.size;
+    this.subtitle.textContent = people ?
+      `${tree.length} messages · ${people} people` :
+      `${tree.length} messages`;
+    this.subtitle.dataset.participants = String(people);
+
+    for(const item of tree) {
+      const message = getMessage(item.mid) as Message.message;
+      this.body.append(this.row(message, item, getMessage));
+    }
+
+    this.body.scrollTop = 0;
   }
 
-  private row(message: Message.message | undefined, mid: number) {
+  private row(
+    message: Message.message | undefined,
+    item: ThreadLayoutItem,
+    getMessage: (mid: number) => any
+  ) {
+    const isOut = !!message?.pFlags?.out;
     const row = document.createElement('div');
-    row.className = 'reply-loom-row' + (message?.pFlags?.out ? ' is-out' : '');
-    row.dataset.mid = String(mid);
-
-    const bubble = document.createElement('div');
-    bubble.className = 'reply-loom-bubble' + (message?.pFlags?.out ? ' is-out' : '');
-
-    const mediaBubble = this.host.chatInner.querySelector<HTMLElement>(`.bubble[data-mid="${mid}"]`);
-    const photo = mediaBubble?.querySelector<HTMLImageElement>('img:not(.emoji):not(.custom-emoji)');
-    if(photo?.currentSrc) {
-      const img = document.createElement('img');
-      img.className = 'reply-loom-media';
-      img.src = photo.currentSrc;
-      img.alt = '';
-      bubble.append(img);
+    row.className = 'reply-loom-row' + (isOut ? ' is-out' : '');
+    row.dataset.mid = String(item.mid);
+    row.dataset.depth = String(item.depth);
+    if(item.replyToMid) {
+      row.dataset.replyTo = String(item.replyToMid);
     }
-
-    const video = mediaBubble?.querySelector<HTMLVideoElement>('video');
-    if(video?.currentSrc && !photo?.currentSrc) {
-      const clip = document.createElement('video');
-      clip.className = 'reply-loom-media';
-      clip.src = video.currentSrc;
-      clip.muted = true;
-      clip.loop = true;
-      clip.playsInline = true;
-      clip.setAttribute('playsinline', '');
-      bubble.append(clip);
-      clip.play()?.catch(() => {});
-    }
+    row.style.setProperty('--thread-depth', String(Math.min(item.depth, 8)));
 
     const name = senderLabel(message);
+    const peerId = senderPeerId(message);
+    const avatar = document.createElement('div');
+    avatar.className = 'avatar avatar-like avatar-gradient avatar-36 reply-loom-avatar';
+    avatar.style.setProperty('--size', '36px');
+    avatar.dataset.color = PEER_COLORS[Math.abs(peerId) % PEER_COLORS.length];
+    avatar.textContent = initials(name || '?');
+    avatar.setAttribute('aria-hidden', 'true');
+    this.mountAvatar(avatar, peerId, name);
+
+    const bubble = document.createElement('div');
+    bubble.className = 'reply-loom-bubble' + (isOut ? ' is-out' : '');
+
     if(name) {
       const sender = document.createElement('span');
       sender.className = 'reply-loom-sender';
+      sender.dataset.color = avatar.dataset.color;
       sender.textContent = name;
       bubble.append(sender);
     }
 
-    const text = document.createElement('div');
-    text.className = 'reply-loom-text';
-    text.textContent = messageText(message) || `#${mid}`;
-    bubble.append(text);
+    if(item.replyToMid) {
+      const parent = getMessage(item.replyToMid) as Message.message | undefined;
+      const quote = document.createElement('div');
+      quote.className = 'reply-loom-quote';
+      quote.dataset.forkProbe = 'thread-quote';
+      const qName = document.createElement('span');
+      qName.className = 'reply-loom-quote-name';
+      qName.textContent = senderLabel(parent) || 'Message';
+      const qText = document.createElement('span');
+      qText.className = 'reply-loom-quote-text';
+      const parentText = messageText(parent) || (parent?.media ? 'Photo' : '');
+      qText.textContent = parentText.slice(0, 80) || `#${item.replyToMid}`;
+      quote.append(qName, qText);
+      bubble.append(quote);
+    }
+
+    const hasMedia = !!(message as ThreadMediaMessage)?.media || !!(message as ThreadMediaMessage)?.__fullMediaUrl;
+    if(hasMedia) {
+      const mediaHost = document.createElement('div');
+      mediaHost.className = 'reply-loom-media-host';
+      bubble.append(mediaHost);
+      attachThreadMedia(mediaHost, message as ThreadMediaMessage, this.middlewareHelper.get());
+    }
+
+    const text = messageText(message);
+    if(text) {
+      const copy = document.createElement('div');
+      copy.className = 'reply-loom-text';
+      copy.textContent = text;
+      bubble.append(copy);
+    }
 
     const meta = document.createElement('span');
     meta.className = 'reply-loom-meta';
@@ -407,8 +513,46 @@ export class ReplyLoomController {
     }
 
     bubble.append(meta);
-    row.append(bubble);
+    if(isOut) {
+      row.append(bubble, avatar);
+    } else {
+      row.append(avatar, bubble);
+    }
+
     return row;
+  }
+
+  private mountAvatar(node: HTMLElement, peerId: number, name: string) {
+    if(!peerId) {
+      return;
+    }
+
+    try {
+      if(!apiManagerProxy.getPeer(peerId as PeerId)) {
+        return;
+      }
+    } catch(_err) {
+      return;
+    }
+
+    import('@components/avatarNew').then(({avatarNew}) => {
+      if(!this.open) {
+        return;
+      }
+
+      try {
+        const av = avatarNew({
+          peerId: peerId as PeerId,
+          peerTitle: name,
+          size: 36,
+          middleware: this.middlewareHelper.get()
+        });
+        if(av?.node) {
+          node.replaceWith(av.node);
+          av.node.classList.add('reply-loom-avatar');
+        }
+      } catch(_err) {}
+    }).catch(() => {});
   }
 
   private applyDim(keep: Set<number>) {

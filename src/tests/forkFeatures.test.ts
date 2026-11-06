@@ -1,10 +1,12 @@
-import {estimateWordTimings, seekIsNearOnset, seekMsForWord, wordClassAtTime, wordIndexAtTime, WORD_ONSET_SEEK_SLACK_MS} from '@lib/forkFeatures/voiceScore/wordTimings';
+import {readFileSync} from 'node:fs';
+import {resolve} from 'node:path';
+import {estimateWordTimings, seekIsNearOnset, seekMsForWord, wordClassAtTime, wordIndexAtTime, WORD_ONSET_SEEK_SLACK_MS, WORD_PREROLL_MS} from '@lib/forkFeatures/voiceScore/wordTimings';
 import {clickedWordStartsInside, durationMsFromSeconds, seekAudioToWord, seekSecondsForWord, toMediaSeconds} from '@lib/forkFeatures/voiceScore/seekAudio';
-import {alignWordsToSpeech, detectSpeechRegions, firstSpeechOnsetMs} from '@lib/forkFeatures/voiceScore/speechOnsets';
+import {alignWordsToSpeech, decodeWavPcm, detectSpeechRegions, firstSpeechOnsetMs} from '@lib/forkFeatures/voiceScore/speechOnsets';
 import {makePauseWav} from '@lib/forkFeatures/voiceScore/pauseWav';
 import {sheetBoxForChatColumn} from '@lib/forkFeatures/replyLoom/fitSheet';
-import {PAUSE_WORDS_TRANSCRIPT, RUSSIAN_VOICE_TRANSCRIPT, SECOND_ONI_INDEX} from '@lib/forkFeatures/layoutTest/transcript';
-import {collectThreadMids, expandLinksForSeed, findThreadRoot, getReplyToMid, linksFromMessages, messageHasReplyChain} from '@lib/forkFeatures/replyLoom/collectThread';
+import {PAUSE_WORDS_TRANSCRIPT, PERSKOVYE_INDEX, ROZOVYE_INDEX, RUSSIAN_VOICE_TRANSCRIPT, SECOND_ONI_INDEX} from '@lib/forkFeatures/layoutTest/transcript';
+import {collectThreadMids, collectThreadTree, expandLinksForSeed, findThreadRoot, getReplyToMid, linksFromMessages, messageHasReplyChain} from '@lib/forkFeatures/replyLoom/collectThread';
 import {fanPoses} from '@lib/forkFeatures/fan/collectUnread';
 import {FAN_CLOSE_TEXT, FAN_WHEEL_OPEN} from '@lib/forkFeatures/fan/overlayConstants';
 import {listIsAtTop, reduceFanWheel} from '@lib/forkFeatures/fan/gesture';
@@ -139,6 +141,12 @@ describe('Reply Loom thread walk', () => {
     const links = expandLinksForSeed({mid: 103, replyToMid: 102, replyToTopId: 100}, linksFromMessages(messages));
     expect(collectThreadMids(103, links)).toEqual([100, 101, 102, 103, 104, 105]);
     expect(collectThreadMids(104, links)).toEqual([100, 101, 102, 103, 104, 105]);
+    const tree = collectThreadTree(103, links);
+    expect(tree[0]).toMatchObject({mid: 100, depth: 0});
+    expect(tree.find((item) => item.mid === 101)).toMatchObject({depth: 1, replyToMid: 100});
+    expect(tree.find((item) => item.mid === 103)).toMatchObject({depth: 3, replyToMid: 102});
+    expect(tree.find((item) => item.mid === 104)).toMatchObject({depth: 2, replyToMid: 101});
+    expect(tree.find((item) => item.mid === 105)).toMatchObject({depth: 1, replyToMid: 100});
   });
 
   test('Thread is only for messages that sit on a reply chain', () => {
@@ -254,10 +262,11 @@ describe('Voice Score speech onsets', () => {
     const audio = {currentTime: 0, duration: wav.durationMs / 1000};
     expect(clickedWordStartsInside(words, 1, audio)).toBe(true);
     const timeMs = audio.currentTime * 1000;
-    expect(timeMs).toBeGreaterThanOrEqual(words[1].startMs - 1);
-    expect(timeMs - wav.onset2Ms).toBeLessThan(100);
-    expect(seekIsNearOnset(words[1], timeMs)).toBe(true);
-    expect(wordIndexAtTime(words, timeMs)).toBe(1);
+    expect(timeMs).toBeGreaterThanOrEqual(words[0].endMs - 1);
+    expect(timeMs).toBeLessThan(words[1].endMs);
+    expect(Math.abs(timeMs - wav.onset2Ms)).toBeLessThan(100);
+    expect(seekIsNearOnset(words[1], timeMs, WORD_ONSET_SEEK_SLACK_MS, words[0])).toBe(true);
+    expect(wordIndexAtTime(words, Math.max(timeMs, words[1].startMs))).toBe(1);
   });
 
   test('a Russian sentence with a pause before Они puts Они on the second burst', () => {
@@ -269,7 +278,47 @@ describe('Voice Score speech onsets', () => {
     expect(Math.abs(oni.startMs - wav.onset2Ms)).toBeLessThan(100);
     const audio = {currentTime: 0, duration: wav.durationMs / 1000};
     expect(clickedWordStartsInside(words, SECOND_ONI_INDEX, audio)).toBe(true);
-    expect((audio.currentTime * 1000) - wav.onset2Ms).toBeLessThan(100);
+    expect(Math.abs((audio.currentTime * 1000) - wav.onset2Ms)).toBeLessThan(100);
+  });
+
+  test('a 14s Russian clip maps every word onto its own onset, never the previous word', () => {
+    const bytes = readFileSync(resolve('src/lib/forkFeatures/layoutTest/media/russian-voice.wav'));
+    const pcm = decodeWavPcm(bytes);
+    expect(pcm).toBeDefined();
+    const truth = JSON.parse(readFileSync(resolve('src/lib/forkFeatures/layoutTest/media/russian-voice-onsets.json'), 'utf8')) as {
+      durationMs: number,
+      words: Array<{word: string, startMs: number, endMs: number}>
+    };
+    const words = alignWordsToSpeech(RUSSIAN_VOICE_TRANSCRIPT, pcm!.durationMs, pcm!.samples, pcm!.sampleRate);
+    expect(words.length).toBe(truth.words.length);
+    expect(PERSKOVYE_INDEX).toBe(13);
+    expect(ROZOVYE_INDEX).toBe(12);
+    expect(words[PERSKOVYE_INDEX].word.replace(/[^\p{L}]/gu, '')).toBe('персиковые');
+    expect(words[ROZOVYE_INDEX].word.replace(/[^\p{L}]/gu, '')).toBe('розовые');
+    expect(words[PERSKOVYE_INDEX].startMs).toBeGreaterThan(words[ROZOVYE_INDEX].endMs - 1);
+
+    const audio = {currentTime: 0, duration: pcm!.durationMs / 1000};
+    for(let i = 0; i < words.length; i++) {
+      const onset = truth.words[i].startMs;
+      const prevEnd = i > 0 ? truth.words[i - 1].endMs : 0;
+      expect(words[i].startMs).toBeGreaterThanOrEqual(prevEnd - 1);
+      expect(words[i].startMs).toBeLessThan(truth.words[i].endMs + 40);
+      audio.currentTime = 0;
+      expect(clickedWordStartsInside(words, i, audio)).toBe(true);
+      const timeMs = audio.currentTime * 1000;
+      if(i > 0) {
+        expect(timeMs + 1).toBeGreaterThanOrEqual(words[i - 1].endMs);
+        expect(timeMs + 1).toBeGreaterThanOrEqual(prevEnd);
+      }
+      expect(timeMs).toBeLessThan(Math.max(words[i].endMs, truth.words[i].endMs));
+      expect(timeMs).toBeGreaterThanOrEqual(onset - 100);
+      expect(timeMs).toBeLessThan(truth.words[i].endMs + 40);
+    }
+
+    audio.currentTime = 0;
+    expect(clickedWordStartsInside(words, PERSKOVYE_INDEX, audio)).toBe(true);
+    expect(audio.currentTime * 1000).toBeGreaterThanOrEqual(truth.words[ROZOVYE_INDEX].endMs - 1);
+    expect(Math.abs(audio.currentTime * 1000 - truth.words[PERSKOVYE_INDEX].startMs)).toBeLessThan(80);
   });
 });
 

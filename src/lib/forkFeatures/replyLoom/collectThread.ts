@@ -4,6 +4,12 @@ export type ThreadLink = {
   replyToTopId?: number
 };
 
+export type ThreadLayoutItem = {
+  mid: number,
+  depth: number,
+  replyToMid?: number
+};
+
 type ReplyToLike = {
   _?: string,
   reply_to_msg_id?: number,
@@ -43,13 +49,12 @@ export function findThreadRoot(seedMid: number, byMid: Map<number, ThreadLink>):
 }
 
 /**
- * Every message that belongs to the same reply tree as `seedMid`: the root,
- * every descendant we know about, and any ancestor still in cache. Sorted
- * oldest → newest so the sheet reads like a conversation.
+ * Every message that belongs to the same reply tree as `seedMid`: the root
+ * on top, then each reply with its depth (who replied to which).
  */
-export function collectThreadMids(seedMid: number, links: ThreadLink[]): number[] {
+export function collectThreadTree(seedMid: number, links: ThreadLink[]): ThreadLayoutItem[] {
   if(!links.length) {
-    return [seedMid];
+    return [{mid: seedMid, depth: 0}];
   }
 
   const byMid = new Map<number, ThreadLink>();
@@ -76,29 +81,43 @@ export function collectThreadMids(seedMid: number, links: ThreadLink[]): number[
     }
   }
 
-  const ordered: number[] = [];
+  const ordered: ThreadLayoutItem[] = [];
   const seen = new Set<number>();
-  const visit = (mid: number) => {
+  const visit = (mid: number, depth: number) => {
     if(seen.has(mid)) {
       return;
     }
 
     seen.add(mid);
-    ordered.push(mid);
+    const link = byMid.get(mid);
+    ordered.push({
+      mid,
+      depth,
+      replyToMid: link?.replyToMid
+    });
     const next = children.get(mid);
     if(!next) {
       return;
     }
 
-    next.slice().sort((a, b) => a - b).forEach(visit);
+    next.slice().sort((a, b) => a - b).forEach((child) => visit(child, depth + 1));
   };
 
-  visit(root);
+  visit(root, 0);
   if(!seen.has(seedMid)) {
-    ordered.push(seedMid);
+    ordered.push({mid: seedMid, depth: 0, replyToMid: byMid.get(seedMid)?.replyToMid});
   }
 
   return ordered;
+}
+
+/**
+ * Every message that belongs to the same reply tree as `seedMid`: the root,
+ * every descendant we know about, and any ancestor still in cache. Sorted
+ * oldest → newest so the sheet reads like a conversation.
+ */
+export function collectThreadMids(seedMid: number, links: ThreadLink[]): number[] {
+  return collectThreadTree(seedMid, links).map((item) => item.mid);
 }
 
 export function getReplyToMid(message: MessageLike | undefined): number | undefined {

@@ -120,12 +120,15 @@ export default function VoiceScoreWords(props: {
 
     const timed = words();
     const word = timed[index] || fallback;
-    const seconds = seekAudioToWord(audio, word);
+    const previous = index > 0 ? timed[index - 1] : undefined;
+    const seconds = seekAudioToWord(audio, word, previous);
     setTimeMs(seconds * 1000);
 
     const correctIfEarly = () => {
-      if(audio.currentTime + 1e-3 < word.startMs / 1000 || !seekIsNearOnset(word, audio.currentTime * 1000)) {
-        const inner = seekSecondsForWord(word);
+      const nowMs = audio.currentTime * 1000;
+      const floorMs = previous ? previous.endMs : 0;
+      if(nowMs + 1 < floorMs || !seekIsNearOnset(word, nowMs, undefined, previous)) {
+        const inner = seekSecondsForWord(word, previous);
         setCurrentTime(audio, inner);
       }
 

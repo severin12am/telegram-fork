@@ -120,19 +120,54 @@ function visibleBox(el: HTMLElement | null): LayoutBox | null {
   return boxFromRect(rect);
 }
 
+/**
+ * Top of the composer, including the Reply-to helper that grows above the
+ * input field. Measuring only `.chat-input` before `is-helper-active` is why
+ * the helper overlapped the last thread bubble.
+ */
+export function composerBox(chat: HTMLElement): LayoutBox | null {
+  const nodes = [
+    chat.querySelector<HTMLElement>('.chat-input'),
+    chat.querySelector<HTMLElement>('.reply-wrapper'),
+    chat.querySelector<HTMLElement>('.rows-wrapper')
+  ];
+  let top = Infinity;
+  let bottom = -Infinity;
+  let left = Infinity;
+  let right = -Infinity;
+  let found = false;
+  for(const el of nodes) {
+    const box = visibleBox(el);
+    if(!box || box.height < 4) {
+      continue;
+    }
+
+    found = true;
+    top = Math.min(top, box.top);
+    bottom = Math.max(bottom, box.bottom);
+    left = Math.min(left, box.left);
+    right = Math.max(right, box.right);
+  }
+
+  if(!found) {
+    return null;
+  }
+
+  return {left, top, right, bottom, width: right - left, height: bottom - top};
+}
+
 export function layoutReplyLoomSheet(sheet: HTMLElement, chat: HTMLElement): ReplyLoomFit | undefined {
   const bubbles = chat.querySelector<HTMLElement>('.bubbles');
   const columnEl = bubbles || chat;
   const topbar = chat.querySelector<HTMLElement>('.topbar');
   const plates = chat.querySelector<HTMLElement>('.topbar-floating-plates');
-  const input = chat.querySelector<HTMLElement>('.chat-input');
   const sidebar = document.getElementById('column-left');
 
   const fit = sheetBoxForChatColumn({
     column: boxFromRect(columnEl.getBoundingClientRect()),
     topbar: visibleBox(topbar),
     pinned: visibleBox(plates),
-    input: visibleBox(input),
+    input: composerBox(chat),
     sidebar: visibleBox(sidebar),
     rightbar: document.body.classList.contains('is-right-column-shown') &&
       !document.body.classList.contains('right-column-floats') ?
