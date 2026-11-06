@@ -15,6 +15,8 @@ import {
   ThreadLink
 } from '@lib/forkFeatures/replyLoom/collectThread';
 import {attachThreadMedia, ThreadMediaMessage} from '@lib/forkFeatures/replyLoom/threadMedia';
+import {fillAvatarSlot} from '@lib/forkFeatures/replyLoom/threadAvatars';
+import {paintThreadConnectors} from '@lib/forkFeatures/replyLoom/paintThreadTree';
 import {isForkFeatureEnabled} from '@lib/forkFeatures/flags';
 import {forkLabel} from '@lib/forkFeatures/label';
 import {layoutReplyLoomSheet} from '@lib/forkFeatures/replyLoom/fitSheet';
@@ -108,16 +110,6 @@ function senderPeerId(message: Message.message | undefined): number {
   return Number(message?.fromId || message?.peerId || 0) || 0;
 }
 
-function initials(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if(!parts.length) {
-    return '';
-  }
-
-  const letters = parts.slice(0, 2).map((part) => part[0]).join('');
-  return letters.toUpperCase();
-}
-
 function cachedHistoryMessages(storageKey: string | undefined, peerId: PeerId): any[] {
   const proxy = apiManagerProxy as unknown as {
     mirrors?: {messages?: Record<string, Record<number, any>>}
@@ -203,6 +195,7 @@ function collectAllLinks(host: ReplyLoomHost, seed: Message.message): ThreadLink
 export class ReplyLoomController {
   private sheet: HTMLElement;
   private body: HTMLElement;
+  private treeHost: HTMLElement;
   private subtitle: HTMLElement;
   private open = false;
   private seedMid = 0;
@@ -210,6 +203,7 @@ export class ReplyLoomController {
   private resizeObserver?: ResizeObserver;
   private middlewareHelper: MiddlewareHelper;
   private onViewport = () => this.layout();
+  private onBodyScroll = () => this.paintTree();
   private onKeyDown = (event: KeyboardEvent) => {
     if(!this.open) {
       return;
@@ -271,6 +265,10 @@ export class ReplyLoomController {
     this.body = document.createElement('div');
     this.body.className = 'reply-loom-sheet-body';
     this.body.dataset.forkProbe = 'thread-body';
+    this.body.addEventListener('scroll', this.onBodyScroll, {passive: true});
+    this.treeHost = document.createElement('div');
+    this.treeHost.className = 'reply-loom-tree-host';
+    this.body.append(this.treeHost);
 
     this.sheet.append(head, this.body);
     this.mountParent().append(this.sheet);
@@ -347,6 +345,7 @@ export class ReplyLoomController {
     this.close();
     this.unwatchLayout();
     document.removeEventListener('keydown', this.onKeyDown, true);
+    this.body.removeEventListener('scroll', this.onBodyScroll);
     this.sheet.remove();
   }
 
@@ -364,6 +363,7 @@ export class ReplyLoomController {
     }
 
     layoutReplyLoomSheet(this.sheet, chat);
+    this.paintTree();
   }
 
   private watchLayout() {
@@ -379,6 +379,8 @@ export class ReplyLoomController {
 
     const chat = this.host.container.closest('.chat') || this.host.container;
     observer.observe(chat);
+    observer.observe(this.body);
+    observer.observe(this.treeHost);
     observer.observe(this.mountParent());
     const bubbles = chat.querySelector('.bubbles');
     if(bubbles) {
@@ -411,7 +413,9 @@ export class ReplyLoomController {
     const getMessage = (mid: number) => this.host.chat.getMessage(mid);
     const links = collectAllLinks(this.host, seed);
     const tree = collectThreadTree(seed.mid, links);
-    this.body.replaceChildren();
+    this.treeHost = document.createElement('div');
+    this.treeHost.className = 'reply-loom-tree-host';
+    this.body.replaceChildren(this.treeHost);
     this.body.dataset.forkProbe = 'thread-body';
     this.body.dataset.tree = '1';
     this.applyDim(new Set(tree.map((item) => item.mid)));
@@ -432,10 +436,28 @@ export class ReplyLoomController {
 
     for(const item of tree) {
       const message = getMessage(item.mid) as Message.message;
-      this.body.append(this.row(message, item, getMessage));
+      this.treeHost.append(this.row(message, item, getMessage));
     }
 
     this.body.scrollTop = 0;
+    this.resizeObserver?.observe(this.treeHost);
+    requestAnimationFrame(() => {
+      this.paintTree();
+      requestAnimationFrame(() => {
+        this.paintTree();
+        setTimeout(() => this.paintTree(), 80);
+        setTimeout(() => this.paintTree(), 280);
+      });
+    });
+  }
+
+  private paintTree() {
+    if(!this.open) {
+      return;
+    }
+
+    const segments = paintThreadConnectors(this.treeHost);
+    this.body.dataset.connectors = String(segments.length);
   }
 
   private row(
@@ -455,13 +477,15 @@ export class ReplyLoomController {
 
     const name = senderLabel(message);
     const peerId = senderPeerId(message);
-    const avatar = document.createElement('div');
-    avatar.className = 'avatar avatar-like avatar-gradient avatar-36 reply-loom-avatar';
-    avatar.style.setProperty('--size', '36px');
-    avatar.dataset.color = PEER_COLORS[Math.abs(peerId) % PEER_COLORS.length];
-    avatar.textContent = initials(name || '?');
-    avatar.setAttribute('aria-hidden', 'true');
-    this.mountAvatar(avatar, peerId, name);
+    const color = PEER_COLORS[Math.abs(peerId) % PEER_COLORS.length];
+    const slot = document.createElement('div');
+    slot.className = 'reply-loom-avatar-slot avatar-gradient avatar-36';
+    slot.setAttribute('aria-hidden', 'true');
+    fillAvatarSlot(slot, {
+      peerId,
+      name,
+      photoUrl: (message as ThreadMediaMessage & {__avatarUrl?: string})?.__avatarUrl
+    }, this.middlewareHelper.get(), color, () => this.paintTree());
 
     const bubble = document.createElement('div');
     bubble.className = 'reply-loom-bubble' + (isOut ? ' is-out' : '');
@@ -469,7 +493,7 @@ export class ReplyLoomController {
     if(name) {
       const sender = document.createElement('span');
       sender.className = 'reply-loom-sender';
-      sender.dataset.color = avatar.dataset.color;
+      sender.dataset.color = color;
       sender.textContent = name;
       bubble.append(sender);
     }
@@ -513,46 +537,8 @@ export class ReplyLoomController {
     }
 
     bubble.append(meta);
-    if(isOut) {
-      row.append(bubble, avatar);
-    } else {
-      row.append(avatar, bubble);
-    }
-
+    row.append(slot, bubble);
     return row;
-  }
-
-  private mountAvatar(node: HTMLElement, peerId: number, name: string) {
-    if(!peerId) {
-      return;
-    }
-
-    try {
-      if(!apiManagerProxy.getPeer(peerId as PeerId)) {
-        return;
-      }
-    } catch(_err) {
-      return;
-    }
-
-    import('@components/avatarNew').then(({avatarNew}) => {
-      if(!this.open) {
-        return;
-      }
-
-      try {
-        const av = avatarNew({
-          peerId: peerId as PeerId,
-          peerTitle: name,
-          size: 36,
-          middleware: this.middlewareHelper.get()
-        });
-        if(av?.node) {
-          node.replaceWith(av.node);
-          av.node.classList.add('reply-loom-avatar');
-        }
-      } catch(_err) {}
-    }).catch(() => {});
   }
 
   private applyDim(keep: Set<number>) {

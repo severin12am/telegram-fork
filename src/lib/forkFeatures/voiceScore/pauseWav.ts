@@ -52,9 +52,10 @@ function encodeWav(samples: Float32Array, sampleRate: number): Uint8Array {
 }
 
 function writeTone(samples: Float32Array, offset: number, n: number, sampleRate: number, freq: number) {
+  const fade = Math.max(1, Math.round(sampleRate * 0.004));
   for(let i = 0; i < n; i++) {
-    const window = Math.sin(Math.PI * i / Math.max(1, n - 1));
-    samples[offset + i] = Math.sin(2 * Math.PI * freq * i / sampleRate) * 0.55 * window;
+    const env = i < fade ? i / fade : (n - 1 - i < fade ? (n - 1 - i) / fade : 1);
+    samples[offset + i] = Math.sin(2 * Math.PI * freq * i / sampleRate) * 0.55 * env;
   }
 }
 

@@ -1,5 +1,5 @@
 import {chromium} from '@playwright/test';
-import {mkdirSync} from 'fs';
+import {mkdirSync, writeFileSync} from 'fs';
 import {join} from 'path';
 
 const base = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:43123';
@@ -14,6 +14,7 @@ const VIEWPORTS = [
   {name: '1920x1080', width: 1920, height: 1080},
   {name: '390x844', width: 390, height: 844, touch: true}
 ];
+const CLIPS = ['peach', 'park', 'vpn'];
 
 function save(page, name) {
   return Promise.all(outDirs.map((dir) => page.screenshot({
@@ -54,17 +55,56 @@ function assertThread(report, viewport) {
     if(!report.close) failures.push('missing close X');
     const nested = (report.depths || []).filter((row) => Number(row.depth) > 0);
     if(nested.length < 3) failures.push(`tree too flat ${JSON.stringify(report.depths)}`);
+    if((report.photos || 0) < 5) failures.push(`avatars without photos ${JSON.stringify(report.avatars)}`);
+    if((report.connectors || []).length < 4) failures.push(`missing connectors ${JSON.stringify(report.connectors)}`);
+    for(const item of report.avatars || []) {
+      if(!item.hasPhoto) failures.push(`avatar ${item.mid} has no photo`);
+    }
   }
   return failures;
+}
+
+async function clickEveryWord(page, clip) {
+  await page.goto(`${base}/fork-layout.html?view=voice&clip=${clip}`, {waitUntil: 'domcontentloaded'});
+  await page.waitForSelector('.voice-score-word');
+  await page.waitForFunction(() => {
+    return document.querySelector('[data-fork-feature="voice-score"]')?.getAttribute('data-aligned') === 'speech';
+  }, null, {timeout: 60000});
+  const count = await page.locator('.voice-score-word').count();
+  const rows = [];
+  for(let i = 0; i < count; i++) {
+    const word = page.locator('.voice-score-word').nth(i);
+    await word.scrollIntoViewIfNeeded();
+    await word.click();
+    await page.waitForFunction((index) => {
+      const status = document.querySelector('[data-fork-probe="voice-status"]');
+      return status?.getAttribute('data-word-index') === String(index) &&
+        status.getAttribute('data-delta-ms') != null;
+    }, i, {timeout: 15000});
+    await page.waitForTimeout(80);
+    const status = page.locator('[data-fork-probe="voice-status"]');
+    rows.push({
+      clip,
+      index: i,
+      word: (await page.locator('.voice-score-word').nth(i).innerText()).trim(),
+      delta: Number(await status.getAttribute('data-delta-ms')),
+      highlight: Number(await status.getAttribute('data-highlight-index')),
+      highlightOk: await status.getAttribute('data-highlight-ok') === '1',
+      current: Number(await status.getAttribute('data-current-ms')),
+      truth: Number(await status.getAttribute('data-truth-ms'))
+    });
+  }
+  return rows;
 }
 
 const browser = await chromium.launch({
   executablePath: chrome,
   headless: true,
-  args: ['--no-sandbox', '--disable-dev-shm-usage']
+  args: ['--no-sandbox', '--disable-dev-shm-usage', '--autoplay-policy=no-user-gesture-required']
 });
 
 const results = [];
+const voiceTable = [];
 try {
   for(const viewport of VIEWPORTS) {
     const context = await browser.newContext({
@@ -82,19 +122,21 @@ try {
     }, null, {timeout: 60000});
     await page.waitForFunction(() => {
       const photo = document.querySelector('[data-fork-probe="thread-photo"]');
-      return photo && photo.naturalWidth >= 400;
+      const avatars = document.querySelectorAll('.reply-loom-avatar-slot img');
+      const tree = document.querySelectorAll('.reply-loom-tree path');
+      return photo && photo.naturalWidth >= 400 && avatars.length >= 5 && tree.length >= 4;
     }, null, {timeout: 60000});
-    await page.waitForTimeout(400);
+    await page.waitForTimeout(500);
     const report = await page.evaluate(() => window.__forkLayout);
     const failures = assertThread(report, viewport);
-    await save(page, `v5-thread-tree-${viewport.name}.png`);
-    await save(page, `v5-thread-photo-${viewport.name}.png`);
+    await save(page, `v6-thread-tree-${viewport.name}.png`);
+    await save(page, `v6-thread-photo-${viewport.name}.png`);
     await page.keyboard.press('Escape');
     await page.waitForFunction(() => {
       const sheet = document.querySelector('[data-fork-probe="thread-sheet"]');
       return sheet && !sheet.classList.contains('is-open');
     });
-    await save(page, `v5-thread-esc-${viewport.name}.png`);
+    await save(page, `v6-thread-esc-${viewport.name}.png`);
     const closed = await page.evaluate(() => {
       const sheet = document.querySelector('[data-fork-probe="thread-sheet"]');
       return {open: sheet?.classList.contains('is-open'), has: document.querySelector('.chat')?.classList.contains('has-reply-loom')};
@@ -105,10 +147,10 @@ try {
       participants: report.participants,
       photo: report.photo,
       depths: report.depths,
-      overflow: report.overflow,
-      replyTop: report.replyTop,
-      inputTop: report.inputTop
-    }, file: `v5-thread-tree-${viewport.name}.png`});
+      photos: report.photos,
+      connectors: (report.connectors || []).length,
+      overflow: report.overflow
+    }, file: `v6-thread-tree-${viewport.name}.png`});
     await context.close();
   }
 
@@ -118,28 +160,38 @@ try {
   });
   const voice = await voiceContext.newPage();
   voice.setDefaultTimeout(60000);
-  await voice.goto(`${base}/fork-layout.html?view=voice`, {waitUntil: 'domcontentloaded'});
-  await voice.waitForSelector('.voice-score-word');
+
+  for(const clip of CLIPS) {
+    const rows = await clickEveryWord(voice, clip);
+    voiceTable.push(...rows);
+    const errors = rows.map((row) => row.delta);
+    const max = Math.max(...errors);
+    const mean = errors.reduce((sum, value) => sum + value, 0) / errors.length;
+    const highlightFail = rows.filter((row) => !row.highlightOk || row.highlight !== row.index);
+    results.push({
+      view: `voice-${clip}`,
+      words: rows.length,
+      max,
+      mean: Number(mean.toFixed(1)),
+      highlightFail: highlightFail.length,
+      fail: max >= 150 || highlightFail.length > 0
+    });
+  }
+
+  await voice.goto(`${base}/fork-layout.html?view=voice&clip=peach`, {waitUntil: 'domcontentloaded'});
   await voice.waitForFunction(() => {
     return document.querySelector('[data-fork-feature="voice-score"]')?.getAttribute('data-aligned') === 'speech';
-  }, {timeout: 60000});
+  }, null, {timeout: 60000});
   const meta = await voice.evaluate(() => window.__forkLayout);
   const persik = voice.locator('.voice-score-word').nth(meta.persikIndex);
   await persik.scrollIntoViewIfNeeded();
   await persik.click();
   await voice.waitForFunction(() => {
     const status = document.querySelector('[data-fork-probe="voice-status"]');
-    return status && status.getAttribute('data-delta-ms') != null;
+    return status && status.getAttribute('data-word-index') === '13';
   });
   await voice.waitForTimeout(250);
-  const status = {
-    index: await voice.locator('[data-fork-probe="voice-status"]').getAttribute('data-word-index'),
-    delta: Number(await voice.locator('[data-fork-probe="voice-status"]').getAttribute('data-delta-ms')),
-    current: Number(await voice.locator('[data-fork-probe="voice-status"]').getAttribute('data-current-ms')),
-    truth: Number(await voice.locator('[data-fork-probe="voice-status"]').getAttribute('data-truth-ms')),
-    text: await voice.locator('[data-fork-probe="voice-status"]').innerText()
-  };
-  await save(voice, 'v5-voice-persikovye-desktop.png');
+  await save(voice, 'v6-voice-persikovye-desktop.png');
 
   const mobileVoice = await browser.newContext({
     viewport: {width: 390, height: 844},
@@ -148,40 +200,28 @@ try {
   });
   const mv = await mobileVoice.newPage();
   mv.setDefaultTimeout(60000);
-  await mv.goto(`${base}/fork-layout.html?view=voice`, {waitUntil: 'domcontentloaded'});
-  await mv.waitForSelector('.voice-score-word');
+  await mv.goto(`${base}/fork-layout.html?view=voice&clip=peach`, {waitUntil: 'domcontentloaded'});
   await mv.waitForFunction(() => {
     return document.querySelector('[data-fork-feature="voice-score"]')?.getAttribute('data-aligned') === 'speech';
-  }, {timeout: 60000});
+  }, null, {timeout: 60000});
   const mMeta = await mv.evaluate(() => window.__forkLayout);
   const mPersik = mv.locator('.voice-score-word').nth(mMeta.persikIndex);
   await mPersik.scrollIntoViewIfNeeded();
   await mPersik.tap();
   await mv.waitForFunction(() => {
     const status = document.querySelector('[data-fork-probe="voice-status"]');
-    return status && status.getAttribute('data-delta-ms') != null;
+    return status && status.getAttribute('data-word-index') === '13';
   });
   await mv.waitForTimeout(250);
-  const mStatus = {
-    index: await mv.locator('[data-fork-probe="voice-status"]').getAttribute('data-word-index'),
-    delta: Number(await mv.locator('[data-fork-probe="voice-status"]').getAttribute('data-delta-ms')),
-    current: Number(await mv.locator('[data-fork-probe="voice-status"]').getAttribute('data-current-ms')),
-    truth: Number(await mv.locator('[data-fork-probe="voice-status"]').getAttribute('data-truth-ms')),
-    text: await mv.locator('[data-fork-probe="voice-status"]').innerText()
-  };
-  await save(mv, 'v5-voice-persikovye-mobile.png');
+  await save(mv, 'v6-voice-persikovye-mobile.png');
 
-  const rozovyeEnd = meta.truth[meta.rozovyeIndex].endMs;
-  const voiceFail = [status, mStatus].filter((item) => {
-    return Number(item.index) !== meta.persikIndex ||
-      !(item.delta < 100) ||
-      item.current < rozovyeEnd - 1;
-  });
-  results.push({view: 'voice-desktop', status, persikIndex: meta.persikIndex, rozovyeEnd});
-  results.push({view: 'voice-mobile', status: mStatus, persikIndex: mMeta.persikIndex, rozovyeEnd});
+  const tablePath = join(outDirs[0], 'v6-voice-word-table.json');
+  writeFileSync(tablePath, JSON.stringify(voiceTable, null, 2));
+  writeFileSync(join(outDirs[1], 'v6-voice-word-table.json'), JSON.stringify(voiceTable, null, 2));
 
-  console.log(JSON.stringify({results, voiceFail}, null, 2));
-  if(results.some((item) => item.failures && item.failures.length) || voiceFail.length) {
+  const voiceFail = results.filter((item) => item.view?.startsWith('voice-') && item.fail);
+  console.log(JSON.stringify({results, voiceFail, table: voiceTable.length}, null, 2));
+  if(results.some((item) => (item.failures && item.failures.length) || item.fail) || voiceFail.length) {
     process.exitCode = 1;
   }
 } finally {

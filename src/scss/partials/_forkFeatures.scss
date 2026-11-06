@@ -119,55 +119,58 @@
   }
 
   &-body {
+    position: relative;
     overflow: auto;
     overflow-x: hidden;
-    padding: 10px var(--chat-bubbles-padding, .75rem) 16px;
+    padding: 10px var(--chat-bubbles-padding, .75rem) 24px;
     flex: 1 1 auto;
     min-width: 0;
     min-height: 0;
     width: 100%;
-    max-width: min(100%, 52rem);
-    margin-inline: auto;
     box-sizing: border-box;
+    color: var(--secondary-text-color);
+  }
+}
+
+.reply-loom-tree-host {
+  position: relative;
+  min-height: 100%;
+  isolation: isolate;
+}
+
+.reply-loom-tree {
+  position: absolute;
+  inset-inline-start: 0;
+  top: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: visible;
+  color: var(--secondary-text-color);
+  opacity: .72;
+
+  path {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
   }
 }
 
 .reply-loom-row {
   --thread-depth: 0;
   display: flex;
-  align-items: flex-end;
-  gap: 8px;
-  margin: 6px 0;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 10px 0;
   min-width: 0;
   max-width: 100%;
-  padding-inline-start: calc(var(--thread-depth) * 18px);
+  padding-inline-start: calc(var(--thread-depth) * 28px);
   position: relative;
-
-  &.is-out {
-    justify-content: flex-end;
-    padding-inline-start: 0;
-    padding-inline-end: calc(var(--thread-depth) * 18px);
-  }
-
-  &:not([data-depth="0"])::before {
-    content: '';
-    position: absolute;
-    inset-inline-start: calc(var(--thread-depth) * 18px - 10px);
-    top: -4px;
-    bottom: 18px;
-    width: 2px;
-    border-radius: 1px;
-    background: var(--secondary-text-color);
-    opacity: .28;
-    pointer-events: none;
-  }
-
-  &.is-out:not([data-depth="0"])::before {
-    inset-inline-start: auto;
-    inset-inline-end: calc(var(--thread-depth) * 18px - 10px);
-  }
+  z-index: 1;
 }
 
+.reply-loom-avatar-slot,
 .reply-loom-avatar {
   flex: none;
   --size: 36px;
@@ -180,6 +183,20 @@
   line-height: 36px;
   text-align: center;
   color: #fff;
+  position: relative;
+  z-index: 2;
+  background-color: var(--surface-color);
+  box-shadow: 0 0 0 3px var(--background-color, var(--surface-color));
+
+  .avatar,
+  img,
+  .avatar-photo {
+    display: block;
+    width: 36px;
+    height: 36px;
+    object-fit: cover;
+    border-radius: 50%;
+  }
 }
 
 .reply-loom-bubble {
@@ -206,6 +223,14 @@
   font-weight: 600;
   color: var(--primary-color);
   margin-bottom: 2px;
+
+  &[data-color="red"] { color: var(--peer-avatar-red-top, var(--primary-color)); }
+  &[data-color="orange"] { color: var(--peer-avatar-orange-top, var(--primary-color)); }
+  &[data-color="violet"] { color: var(--peer-avatar-violet-top, var(--primary-color)); }
+  &[data-color="green"] { color: var(--peer-avatar-green-top, var(--primary-color)); }
+  &[data-color="cyan"] { color: var(--peer-avatar-cyan-top, var(--primary-color)); }
+  &[data-color="pink"] { color: var(--peer-avatar-pink-top, var(--primary-color)); }
+  &[data-color="blue"] { color: var(--peer-avatar-blue-top, var(--primary-color)); }
 }
 
 .reply-loom-quote {

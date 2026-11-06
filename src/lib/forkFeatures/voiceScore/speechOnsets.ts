@@ -1,4 +1,4 @@
-import {estimateWordTimings, tokenizeTranscript, VoiceScoreWord} from '@lib/forkFeatures/voiceScore/wordTimings';
+import {estimateWordTimings, SNAP_WINDOW_MS, tokenizeTranscript, VoiceScoreWord} from '@lib/forkFeatures/voiceScore/wordTimings';
 
 export type SpeechRegion = {
   startMs: number,
@@ -12,11 +12,12 @@ export type PcmClip = {
 };
 
 export const SPEECH_FRAME_MS = 10;
-/** Merge only clicks/pops, never a comma pause. */
-export const HOLE_FILL_MS = 30;
+/** Merge stop-consonant holes, never a comma / word-gap pause. */
+export const HOLE_FILL_MS = 50;
 export const MIN_SPEECH_MS = 40;
-export const ONSET_DIP_MS = 35;
-export const MIN_ONSET_GAP_MS = 50;
+/** Ignore syllable-internal wobble; keep comma / word-gap dips. */
+export const ONSET_DIP_MS = 70;
+export const MIN_ONSET_GAP_MS = 80;
 export const MIN_GAP_MS = 80;
 
 export function rmsFrames(samples: Float32Array, sampleRate: number, frameMs = SPEECH_FRAME_MS): Float32Array {
@@ -73,15 +74,23 @@ function closeShortHoles(mask: boolean[], maxHole: number): boolean[] {
   return filled;
 }
 
+export function speechMaskFromRms(
+  rms: Float32Array,
+  frameMs = SPEECH_FRAME_MS,
+  holeFillMs = HOLE_FILL_MS
+): boolean[] {
+  const threshold = speechThreshold(rms);
+  const raw = Array.from(rms, (value) => value >= threshold);
+  return closeShortHoles(raw, Math.max(1, Math.round(holeFillMs / frameMs)));
+}
+
 export function speechRegionsFromRms(
   rms: Float32Array,
   frameMs = SPEECH_FRAME_MS,
   holeFillMs = HOLE_FILL_MS,
   minSpeechMs = MIN_SPEECH_MS
 ): SpeechRegion[] {
-  const threshold = speechThreshold(rms);
-  const raw = Array.from(rms, (value) => value >= threshold);
-  const mask = closeShortHoles(raw, Math.max(1, Math.round(holeFillMs / frameMs)));
+  const mask = speechMaskFromRms(rms, frameMs, holeFillMs);
   const minFrames = Math.max(1, Math.round(minSpeechMs / frameMs));
   const regions: SpeechRegion[] = [];
   let i = 0;
@@ -188,271 +197,120 @@ export function detectWordOnsets(samples: Float32Array, sampleRate: number): num
   return onsets;
 }
 
-function clusterOnsets(onsets: number[], maxGap = 140): number[] {
-  const clustered: number[] = [];
-  for(const onset of onsets) {
-    if(clustered.length && onset - clustered[clustered.length - 1] < maxGap) {
-      continue;
-    }
-
-    clustered.push(onset);
+export function trailingSilenceMs(
+  rms: Float32Array,
+  frameMs: number,
+  durationMs: number
+): number {
+  if(!rms.length) {
+    return 0;
   }
 
-  return clustered;
+  const threshold = Math.max(speechThreshold(rms) * 0.35, 0.006);
+  let i = rms.length - 1;
+  while(i > 0 && rms[i] < threshold) {
+    i--;
+  }
+
+  const spokenEnd = (i + 1) * frameMs;
+  const tail = Math.max(0, durationMs - spokenEnd);
+  return tail >= 180 ? tail : 0;
 }
 
-function expectedStartsFromEnergy(
+export function proportionalStarts(
+  tokens: Array<{weight: number}>,
+  durationMs: number
+): number[] {
+  const totalWeight = tokens.reduce((sum, token) => sum + token.weight, 0) || 1;
+  const total = Math.max(1, durationMs);
+  let cursor = 0;
+  return tokens.map((token) => {
+    const start = cursor;
+    cursor += (token.weight / totalWeight) * total;
+    return start;
+  });
+}
+
+/**
+ * Syllable weights along the speech-only timeline (silence has no weight).
+ * Amplitude is ignored so a loud syllable cannot steal time from a quiet one.
+ * Tokens are never packed into whole regions — each start is independent.
+ */
+export function expectedStartsFromEnergy(
   tokens: Array<{weight: number}>,
   rms: Float32Array,
   frameMs: number,
   durationMs: number
 ): number[] {
+  const mask = speechMaskFromRms(rms, frameMs);
+  const speech: number[] = [];
+  for(let i = 0; i < mask.length; i++) {
+    if(mask[i]) {
+      speech.push(i);
+    }
+  }
+
+  if(!speech.length) {
+    return proportionalStarts(tokens, durationMs);
+  }
+
   const totalWeight = tokens.reduce((sum, token) => sum + token.weight, 0) || 1;
-  const prefix = new Float32Array(rms.length);
-  let energy = 0;
-  for(let i = 0; i < rms.length; i++) {
-    energy += rms[i];
-    prefix[i] = energy;
-  }
-
-  if(!(energy > 0)) {
-    let cursor = 0;
-    return tokens.map((token) => {
-      const start = cursor;
-      cursor += (token.weight / totalWeight) * Math.max(1, durationMs);
-      return start;
-    });
-  }
-
   let acc = 0;
-  let frame = 0;
   return tokens.map((token) => {
-    const target = (acc / totalWeight) * energy;
-    while(frame < prefix.length && prefix[frame] < target) {
-      frame++;
-    }
-
+    const pos = Math.min(speech.length - 1, Math.floor((acc / totalWeight) * speech.length));
     acc += token.weight;
-    return Math.min(durationMs, frame * frameMs);
+    return Math.min(durationMs, speech[pos] * frameMs);
   });
 }
 
-function costToOnset(onset: number, expected: number): number {
-  const back = Math.max(0, expected - onset);
-  const fwd = Math.max(0, onset - expected);
-  return fwd + back * 1.7;
-}
-
-/**
- * Match n tokens to n increasing onsets. Extra onsets (intra-word clicks)
- * are skipped. A later onset is preferred over snapping backward into the
- * previous word.
- */
-export function assignOnsetsToWords(
-  expected: number[],
+export function snapToNearestOnset(
+  expected: number,
   onsets: number[],
-  minGap = MIN_ONSET_GAP_MS
-): number[] | undefined {
-  const n = expected.length;
-  const m = onsets.length;
-  if(!n) {
-    return [];
-  }
+  windowMs = SNAP_WINDOW_MS,
+  floorMs = -Infinity
+): number {
+  let best: number | undefined;
+  let bestDist = Infinity;
+  for(const onset of onsets) {
+    if(onset < floorMs) {
+      continue;
+    }
 
-  if(m < n) {
-    return undefined;
-  }
+    const dist = Math.abs(onset - expected);
+    if(dist > windowMs + SPEECH_FRAME_MS) {
+      continue;
+    }
 
-  const INF = 1e18;
-  const dp: number[][] = Array.from({length: n}, () => Array<number>(m).fill(INF));
-  const parent: number[][] = Array.from({length: n}, () => Array<number>(m).fill(-1));
-
-  for(let j = 0; j <= m - n; j++) {
-    dp[0][j] = costToOnset(onsets[j], expected[0]);
-  }
-
-  for(let i = 1; i < n; i++) {
-    const maxJ = m - (n - i);
-    for(let j = i; j <= maxJ; j++) {
-      const local = costToOnset(onsets[j], expected[i]);
-      for(let k = i - 1; k < j; k++) {
-        if(onsets[j] - onsets[k] < minGap) {
-          continue;
-        }
-
-        const cost = dp[i - 1][k] + local;
-        if(cost < dp[i][j]) {
-          dp[i][j] = cost;
-          parent[i][j] = k;
-        }
-      }
+    if(dist < bestDist - 0.5 || (Math.abs(dist - bestDist) <= 0.5 && (best === undefined || onset > best))) {
+      best = onset;
+      bestDist = dist;
     }
   }
 
-  let bestJ = -1;
-  let best = INF;
-  for(let j = n - 1; j < m; j++) {
-    if(dp[n - 1][j] < best) {
-      best = dp[n - 1][j];
-      bestJ = j;
-    }
-  }
-
-  if(bestJ < 0 || !(best < INF / 2)) {
-    return undefined;
-  }
-
-  const chosen = Array<number>(n);
-  let j = bestJ;
-  for(let i = n - 1; i >= 0; i--) {
-    chosen[i] = onsets[j];
-    j = parent[i][j];
-  }
-
-  return chosen;
+  return best === undefined ? Math.max(expected, floorMs === -Infinity ? 0 : floorMs) : best;
 }
 
-function greedyOnsets(expected: number[], onsets: number[], minGap: number): number[] {
-  const n = expected.length;
-  const snapped: number[] = [];
-  let used = -1;
-  for(let i = 0; i < n; i++) {
-    const remaining = n - i;
-    const lastLegal = onsets.length - remaining;
-    const earliest = used < 0 ? -Infinity : onsets[used] + minGap;
-    let best = -1;
-    let bestCost = Infinity;
-    for(let j = used + 1; j <= lastLegal; j++) {
-      if(onsets[j] < earliest) {
-        continue;
-      }
-
-      const cost = costToOnset(onsets[j], expected[i]);
-      if(cost < bestCost) {
-        bestCost = cost;
-        best = j;
-      }
-    }
-
-    if(best >= 0) {
-      snapped.push(onsets[best]);
-      used = best;
-    } else {
-      const prev = snapped.length ? snapped[snapped.length - 1] + minGap : 0;
-      snapped.push(Math.max(expected[i], prev));
+function mergeOnsets(values: number[], durationMs: number): number[] {
+  const unique = Array.from(new Set(
+    values
+      .map((value) => Math.max(0, Math.min(durationMs, value)))
+      .filter((value) => Number.isFinite(value))
+  )).sort((a, b) => a - b);
+  const merged: number[] = [];
+  for(const value of unique) {
+    if(!merged.length || value - merged[merged.length - 1] >= MIN_ONSET_GAP_MS) {
+      merged.push(value);
     }
   }
 
-  return snapped;
-}
-
-function splitUtterances(text: string): string[] {
-  const parts = text.split(/(?<=[.!?…])\s+/);
-  const out: string[] = [];
-  for(const part of parts) {
-    const trimmed = part.trim();
-    if(trimmed) {
-      out.push(trimmed);
-    }
-  }
-
-  return out.length ? out : (text.trim() ? [text] : []);
-}
-
-function interpolateTokens(
-  tokens: Array<{word: string, trailing: string, weight: number}>,
-  startMs: number,
-  endMs: number
-): VoiceScoreWord[] {
-  const total = Math.max(1, endMs - startMs);
-  const rawTotal = tokens.reduce((sum, token) => sum + token.weight, 0) || 1;
-  let cursor = startMs;
-  return tokens.map((token, index) => {
-    const span = (token.weight / rawTotal) * total;
-    const start = cursor;
-    const end = index === tokens.length - 1 ? endMs : cursor + span;
-    cursor = end;
-    return {
-      word: token.word,
-      trailing: token.trailing,
-      startMs: start,
-      endMs: end
-    };
-  });
-}
-
-function assignGroupsToRegions<T>(groups: T[], regions: SpeechRegion[]): Array<{group: T[], region: SpeechRegion}> {
-  const out: Array<{group: T[], region: SpeechRegion}> = [];
-  let index = 0;
-  for(let r = 0; r < regions.length; r++) {
-    const leftGroups = groups.length - index;
-    const leftRegions = regions.length - r;
-    const take = r === regions.length - 1 ?
-      leftGroups :
-      Math.max(0, Math.min(leftGroups - (leftRegions - 1), Math.max(1, Math.floor(leftGroups / leftRegions))));
-    out.push({
-      group: groups.slice(index, index + take),
-      region: regions[r]
-    });
-    index += take;
-  }
-
-  return out;
-}
-
-function packTokensIntoRegions(
-  text: string,
-  tokens: Array<{word: string, trailing: string, weight: number}>,
-  regions: SpeechRegion[]
-): VoiceScoreWord[] | undefined {
-  const utterances = splitUtterances(text);
-  const utteranceTokens = utterances.map((utterance) => tokenizeTranscript(utterance)).filter((group) => group.length);
-  const packed: VoiceScoreWord[] = [];
-  if(utteranceTokens.length && utteranceTokens.length >= regions.length) {
-    for(const {group, region} of assignGroupsToRegions(utteranceTokens, regions)) {
-      const slice = group.flat();
-      if(!slice.length) {
-        continue;
-      }
-
-      packed.push(...interpolateTokens(slice, region.startMs, region.endMs));
-    }
-  } else {
-    let tokenIndex = 0;
-    const speech = regions.reduce((sum, region) => sum + (region.endMs - region.startMs), 0) || 1;
-    for(let r = 0; r < regions.length; r++) {
-      const region = regions[r];
-      const leftTokens = tokens.length - tokenIndex;
-      const leftRegions = regions.length - r;
-      const take = r === regions.length - 1 ?
-        leftTokens :
-        Math.max(1, Math.min(leftTokens - (leftRegions - 1), Math.round(leftTokens * (
-          (region.endMs - region.startMs) / Math.max(1, speech)
-        ))));
-      const slice = tokens.slice(tokenIndex, tokenIndex + Math.max(1, take));
-      tokenIndex += slice.length;
-      packed.push(...interpolateTokens(slice, region.startMs, region.endMs));
-    }
-  }
-
-  return packed.length === tokens.length ? packed : undefined;
-}
-
-function acousticEnd(startMs: number, nextStart: number, regions: SpeechRegion[]): number {
-  for(const region of regions) {
-    if(startMs >= region.startMs && startMs < region.endMs) {
-      return Math.max(startMs, Math.min(region.endMs, nextStart));
-    }
-  }
-
-  return Math.max(startMs, nextStart);
+  return merged;
 }
 
 /**
- * Put each transcript token on real speech. Telegram's transcription has no
- * per-word times, so an even character split lands a click inside the previous
- * word. Pack tokens along the speech-only timeline (pauses are not time the
- * words share), then snap each start to its own energy onset.
+ * One map for highlight and seek. Place tokens by syllable weight across the
+ * real media duration, then locally snap each start to the nearest energy
+ * onset within ±250 ms. Extra onsets are never uniquely assigned — a token
+ * never jumps a whole segment to consume them.
  */
 export function alignWordsToSpeech(
   text: string,
@@ -461,61 +319,51 @@ export function alignWordsToSpeech(
   sampleRate?: number
 ): VoiceScoreWord[] {
   const tokens = tokenizeTranscript(text);
-  const fallback = estimateWordTimings(text, durationMs);
-  if(!samples || !sampleRate || !tokens.length) {
+  if(!tokens.length) {
+    return [];
+  }
+
+  const duration = Math.max(1, durationMs);
+  const fallback = estimateWordTimings(text, duration);
+  if(!samples || !sampleRate) {
     return fallback;
   }
 
-  const regions = detectSpeechRegions(samples, sampleRate)
-    .map((region) => ({
-      startMs: Math.max(0, region.startMs),
-      endMs: Math.min(durationMs || region.endMs, region.endMs)
-    }))
-    .filter((region) => region.endMs - region.startMs >= MIN_SPEECH_MS);
-
-  if(!regions.length) {
-    return fallback;
-  }
-
-  const rms = rmsFrames(samples, sampleRate);
-  const expected = expectedStartsFromEnergy(tokens, rms, SPEECH_FRAME_MS, durationMs);
-  const onsets = clusterOnsets(
-    detectWordOnsets(samples, sampleRate)
-      .map((onset) => Math.max(0, Math.min(durationMs, onset)))
+  const regions = detectSpeechRegions(samples, sampleRate);
+  const onsets = mergeOnsets(
+    [
+      ...detectWordOnsets(samples, sampleRate),
+      ...regions.map((region) => region.startMs)
+    ],
+    duration
   );
+  const rms = rmsFrames(samples, sampleRate);
+  const mapDuration = Math.max(1, duration - trailingSilenceMs(rms, SPEECH_FRAME_MS, duration));
+  const expected = proportionalStarts(tokens, mapDuration);
 
-  const avgWordMs = Math.max(1, durationMs / tokens.length);
-  const minGap = Math.max(MIN_ONSET_GAP_MS, Math.min(340, avgWordMs * 0.52));
-  let snapped: number[] | undefined;
-  if(onsets.length >= tokens.length) {
-    snapped = assignOnsetsToWords(expected, onsets, minGap) ||
-      greedyOnsets(expected, onsets, minGap);
-  } else {
-    const packed = packTokensIntoRegions(text, tokens, regions);
-    if(packed) {
-      return packed.map((word, index) => {
-        const next = packed[index + 1]?.startMs ?? regions[regions.length - 1].endMs;
-        return {
-          ...word,
-          endMs: acousticEnd(word.startMs, next, regions)
-        };
-      });
+  const totalWeight = tokens.reduce((sum, token) => sum + token.weight, 0) || 1;
+  const starts: number[] = [];
+  for(let i = 0; i < tokens.length; i++) {
+    let floor = i > 0 ? starts[i - 1] + 40 : 0;
+    if(i > 0) {
+      const prevShare = (tokens[i - 1].weight / totalWeight) * mapDuration;
+      floor = Math.max(floor, starts[i - 1] + Math.max(120, prevShare - 80));
     }
 
-    snapped = greedyOnsets(expected, onsets, MIN_ONSET_GAP_MS);
+    const snapped = onsets.length ?
+      snapToNearestOnset(expected[i], onsets, SNAP_WINDOW_MS, floor) :
+      Math.max(floor, expected[i]);
+    starts.push(Math.max(0, Math.min(duration, snapped)));
   }
 
-  const lastRegionEnd = regions[regions.length - 1].endMs;
   return tokens.map((token, index) => {
-    const startMs = snapped[index] ?? expected[index] ?? 0;
-    const nextStart = index + 1 < tokens.length ?
-      (snapped[index + 1] ?? expected[index + 1] ?? lastRegionEnd) :
-      lastRegionEnd;
+    const startMs = starts[index];
+    const next = index + 1 < starts.length ? starts[index + 1] : duration;
     return {
       word: token.word,
       trailing: token.trailing,
       startMs,
-      endMs: acousticEnd(startMs, Math.max(startMs, nextStart), regions)
+      endMs: Math.max(startMs + 1, next)
     };
   });
 }
@@ -623,6 +471,7 @@ export async function decodeMediaPcm(audio: HTMLMediaElement | undefined): Promi
     try {
       const response = await fetch(src);
       if(!response.ok) {
+        pcmCache.delete(src);
         return undefined;
       }
 
@@ -634,6 +483,7 @@ export async function decodeMediaPcm(audio: HTMLMediaElement | undefined): Promi
 
       const Ctx = window.AudioContext || (window as typeof window & {webkitAudioContext?: typeof AudioContext}).webkitAudioContext;
       if(!Ctx) {
+        pcmCache.delete(src);
         return undefined;
       }
 
@@ -650,6 +500,7 @@ export async function decodeMediaPcm(audio: HTMLMediaElement | undefined): Promi
         await ctx.close().catch(() => {});
       }
     } catch(_err) {
+      pcmCache.delete(src);
       return undefined;
     }
   })();

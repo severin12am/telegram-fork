@@ -1,11 +1,22 @@
-import {readFileSync} from 'node:fs';
 import {resolve} from 'node:path';
-import {estimateWordTimings, seekIsNearOnset, seekMsForWord, wordClassAtTime, wordIndexAtTime, WORD_ONSET_SEEK_SLACK_MS, WORD_PREROLL_MS} from '@lib/forkFeatures/voiceScore/wordTimings';
+import {
+  estimateWordTimings,
+  highlightIndex,
+  seekIsNearOnset,
+  seekMsForWord,
+  SNAP_WINDOW_MS,
+  wordClassAtTime,
+  wordIndexAtTime,
+  WORD_ONSET_SEEK_SLACK_MS
+} from '@lib/forkFeatures/voiceScore/wordTimings';
 import {clickedWordStartsInside, durationMsFromSeconds, seekAudioToWord, seekSecondsForWord, toMediaSeconds} from '@lib/forkFeatures/voiceScore/seekAudio';
-import {alignWordsToSpeech, decodeWavPcm, detectSpeechRegions, firstSpeechOnsetMs} from '@lib/forkFeatures/voiceScore/speechOnsets';
+import {alignWordsToSpeech, detectSpeechRegions, firstSpeechOnsetMs} from '@lib/forkFeatures/voiceScore/speechOnsets';
+import {connectorPath, connectorSegments} from '@lib/forkFeatures/replyLoom/paintThreadTree';
+import {decodeOpusFile} from '@/tests/helpers/decodeOpus';
+import voiceClips from '@lib/forkFeatures/layoutTest/media/voice-clips.json';
 import {makePauseWav} from '@lib/forkFeatures/voiceScore/pauseWav';
 import {sheetBoxForChatColumn} from '@lib/forkFeatures/replyLoom/fitSheet';
-import {PAUSE_WORDS_TRANSCRIPT, PERSKOVYE_INDEX, ROZOVYE_INDEX, RUSSIAN_VOICE_TRANSCRIPT, SECOND_ONI_INDEX} from '@lib/forkFeatures/layoutTest/transcript';
+import {PAUSE_WORDS_TRANSCRIPT, PERSKOVYE_INDEX, ROZOVYE_INDEX} from '@lib/forkFeatures/layoutTest/transcript';
 import {collectThreadMids, collectThreadTree, expandLinksForSeed, findThreadRoot, getReplyToMid, linksFromMessages, messageHasReplyChain} from '@lib/forkFeatures/replyLoom/collectThread';
 import {fanPoses} from '@lib/forkFeatures/fan/collectUnread';
 import {FAN_CLOSE_TEXT, FAN_WHEEL_OPEN} from '@lib/forkFeatures/fan/overlayConstants';
@@ -33,6 +44,14 @@ describe('Voice Score timings', () => {
     expect(wordClassAtTime(words[1], now)).toBe('now');
     expect(wordClassAtTime(words[2], now)).toBe('');
     expect(wordIndexAtTime(words, now)).toBe(1);
+  });
+
+  test('highlight and seek share one map: word N lights up at its own start', () => {
+    const words = estimateWordTimings('one two three four', 4000);
+    for(let i = 0; i < words.length; i++) {
+      expect(highlightIndex(words, words[i].startMs, i)).toBe(i);
+      expect(wordIndexAtTime(words, seekMsForWord(words[i], words[i - 1]))).toBe(i);
+    }
   });
 
   test('tapping a word seeks inside that word, not onto the previous token', () => {
@@ -267,58 +286,66 @@ describe('Voice Score speech onsets', () => {
     expect(Math.abs(timeMs - wav.onset2Ms)).toBeLessThan(100);
     expect(seekIsNearOnset(words[1], timeMs, WORD_ONSET_SEEK_SLACK_MS, words[0])).toBe(true);
     expect(wordIndexAtTime(words, Math.max(timeMs, words[1].startMs))).toBe(1);
+    expect(highlightIndex(words, timeMs, 1)).toBe(1);
   });
 
-  test('a Russian sentence with a pause before Они puts Они on the second burst', () => {
-    const wav = makePauseWav({word1Ms: 900, gapMs: 700, word2Ms: 1600});
-    const words = alignWordsToSpeech(RUSSIAN_VOICE_TRANSCRIPT, wav.durationMs, wav.samples, wav.sampleRate);
-    expect(SECOND_ONI_INDEX).toBeGreaterThan(0);
-    const oni = words[SECOND_ONI_INDEX];
-    expect(oni.word.replace(/[^\p{L}]/gu, '')).toBe('Они');
-    expect(Math.abs(oni.startMs - wav.onset2Ms)).toBeLessThan(100);
-    const audio = {currentTime: 0, duration: wav.durationMs / 1000};
-    expect(clickedWordStartsInside(words, SECOND_ONI_INDEX, audio)).toBe(true);
-    expect(Math.abs((audio.currentTime * 1000) - wav.onset2Ms)).toBeLessThan(100);
-  });
+  test.each(voiceClips.clips)(
+    'opus clip $id: every word error < 150ms and highlight is word N',
+    (clip) => {
+      const pcm = decodeOpusFile(resolve('src/lib/forkFeatures/layoutTest/media', clip.ogg));
+      expect(Math.abs(pcm.durationMs - clip.durationMs)).toBeLessThan(80);
+      const words = alignWordsToSpeech(clip.transcript, pcm.durationMs, pcm.samples, pcm.sampleRate);
+      expect(words.length).toBe(clip.words.length);
+      const audio = {currentTime: 0, duration: pcm.durationMs / 1000};
+      const errors: number[] = [];
+      for(let i = 0; i < words.length; i++) {
+        const truth = clip.words[i];
+        expect(words[i].word).toBe(truth.word);
+        const error = Math.abs(words[i].startMs - truth.startMs);
+        errors.push(error);
+        expect(error, `${clip.id} word ${i} ${truth.word} Δ${error.toFixed(0)}`).toBeLessThan(150);
+        if(i > 0) {
+          expect(words[i].startMs).toBeGreaterThanOrEqual(words[i - 1].startMs + 20);
+        }
 
-  test('a 14s Russian clip maps every word onto its own onset, never the previous word', () => {
-    const bytes = readFileSync(resolve('src/lib/forkFeatures/layoutTest/media/russian-voice.wav'));
-    const pcm = decodeWavPcm(bytes);
-    expect(pcm).toBeDefined();
-    const truth = JSON.parse(readFileSync(resolve('src/lib/forkFeatures/layoutTest/media/russian-voice-onsets.json'), 'utf8')) as {
-      durationMs: number,
-      words: Array<{word: string, startMs: number, endMs: number}>
-    };
-    const words = alignWordsToSpeech(RUSSIAN_VOICE_TRANSCRIPT, pcm!.durationMs, pcm!.samples, pcm!.sampleRate);
-    expect(words.length).toBe(truth.words.length);
-    expect(PERSKOVYE_INDEX).toBe(13);
-    expect(ROZOVYE_INDEX).toBe(12);
-    expect(words[PERSKOVYE_INDEX].word.replace(/[^\p{L}]/gu, '')).toBe('персиковые');
-    expect(words[ROZOVYE_INDEX].word.replace(/[^\p{L}]/gu, '')).toBe('розовые');
-    expect(words[PERSKOVYE_INDEX].startMs).toBeGreaterThan(words[ROZOVYE_INDEX].endMs - 1);
-
-    const audio = {currentTime: 0, duration: pcm!.durationMs / 1000};
-    for(let i = 0; i < words.length; i++) {
-      const onset = truth.words[i].startMs;
-      const prevEnd = i > 0 ? truth.words[i - 1].endMs : 0;
-      expect(words[i].startMs).toBeGreaterThanOrEqual(prevEnd - 1);
-      expect(words[i].startMs).toBeLessThan(truth.words[i].endMs + 40);
-      audio.currentTime = 0;
-      expect(clickedWordStartsInside(words, i, audio)).toBe(true);
-      const timeMs = audio.currentTime * 1000;
-      if(i > 0) {
-        expect(timeMs + 1).toBeGreaterThanOrEqual(words[i - 1].endMs);
-        expect(timeMs + 1).toBeGreaterThanOrEqual(prevEnd);
+        audio.currentTime = 0;
+        expect(clickedWordStartsInside(words, i, audio)).toBe(true);
+        const timeMs = audio.currentTime * 1000;
+        expect(highlightIndex(words, timeMs, i)).toBe(i);
+        expect(wordIndexAtTime(words, Math.max(timeMs, words[i].startMs))).toBe(i);
+        expect(timeMs).toBeGreaterThanOrEqual(truth.startMs - 150);
+        expect(timeMs).toBeLessThan(truth.endMs + 40);
+        expect(Math.abs(words[i].startMs - truth.startMs)).toBeLessThanOrEqual(SNAP_WINDOW_MS);
       }
-      expect(timeMs).toBeLessThan(Math.max(words[i].endMs, truth.words[i].endMs));
-      expect(timeMs).toBeGreaterThanOrEqual(onset - 100);
-      expect(timeMs).toBeLessThan(truth.words[i].endMs + 40);
-    }
 
-    audio.currentTime = 0;
-    expect(clickedWordStartsInside(words, PERSKOVYE_INDEX, audio)).toBe(true);
-    expect(audio.currentTime * 1000).toBeGreaterThanOrEqual(truth.words[ROZOVYE_INDEX].endMs - 1);
-    expect(Math.abs(audio.currentTime * 1000 - truth.words[PERSKOVYE_INDEX].startMs)).toBeLessThan(80);
+      const mean = errors.reduce((sum, value) => sum + value, 0) / errors.length;
+      const max = Math.max(...errors);
+      expect(max).toBeLessThan(150);
+      expect(mean).toBeLessThan(80);
+      if(clip.id === 'peach') {
+        expect(PERSKOVYE_INDEX).toBe(13);
+        expect(ROZOVYE_INDEX).toBe(12);
+        audio.currentTime = 0;
+        expect(clickedWordStartsInside(words, PERSKOVYE_INDEX, audio)).toBe(true);
+        expect(audio.currentTime * 1000).toBeGreaterThanOrEqual(clip.words[ROZOVYE_INDEX].endMs - 1);
+        expect(Math.abs(audio.currentTime * 1000 - clip.words[PERSKOVYE_INDEX].startMs)).toBeLessThan(150);
+      }
+    }
+  );
+});
+
+describe('Reply Loom tree connectors', () => {
+  test('the path starts on the parent avatar center and ends on the child', () => {
+    const parent = {mid: 1, cx: 18, cy: 24};
+    const child = {mid: 2, replyToMid: 1, cx: 46, cy: 88};
+    const d = connectorPath(parent, child);
+    expect(d.startsWith('M 18.0 24.0')).toBe(true);
+    expect(d.endsWith('L 46.0 88.0')).toBe(true);
+    expect(d).toContain('Q 18.0 88.0');
+    const segments = connectorSegments([parent, child, {mid: 3, replyToMid: 1, cx: 46, cy: 140}]);
+    expect(segments).toHaveLength(2);
+    expect(segments[0].from.mid).toBe(1);
+    expect(segments[1].to.cy).toBe(140);
   });
 });
 

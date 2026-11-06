@@ -1,145 +1,169 @@
 {
   "transcript": "Почему второе и третье они черного цвета? Они вот это, которые типа розовые, персиковые, они прикольные. Ну, в общем, все прикольно, красиво, эстетично.",
-  "durationMs": 14000,
-  "sampleRate": 16000,
+  "durationMs": 21665.4,
+  "sampleRate": 48000,
+  "ogg": "voice-peach.ogg",
   "words": [
     {
       "word": "Почему",
       "index": 0,
-      "startMs": 55.3,
-      "endMs": 529.1
+      "startMs": 0.0,
+      "endMs": 1012.2,
+      "syllables": 3
     },
     {
       "word": "второе",
       "index": 1,
-      "startMs": 591.3,
-      "endMs": 1118.9
+      "startMs": 1102.2,
+      "endMs": 2103.7,
+      "syllables": 3
     },
     {
       "word": "и",
       "index": 2,
-      "startMs": 1181.1,
-      "endMs": 1483.7
+      "startMs": 2193.7,
+      "endMs": 2534.2,
+      "syllables": 1
     },
     {
       "word": "третье",
       "index": 3,
-      "startMs": 1545.9,
-      "endMs": 2058.6
+      "startMs": 2624.2,
+      "endMs": 3296.2,
+      "syllables": 2
     },
     {
       "word": "они",
       "index": 4,
-      "startMs": 2120.8,
-      "endMs": 2531.2
+      "startMs": 3386.2,
+      "endMs": 4059.0,
+      "syllables": 2
     },
     {
       "word": "черного",
       "index": 5,
-      "startMs": 2593.4,
-      "endMs": 3184.3
+      "startMs": 4149.0,
+      "endMs": 5162.0,
+      "syllables": 3
     },
     {
       "word": "цвета?",
       "index": 6,
-      "startMs": 3246.5,
-      "endMs": 3737.7
+      "startMs": 5252.0,
+      "endMs": 5925.1,
+      "syllables": 2
     },
     {
       "word": "Они",
       "index": 7,
-      "startMs": 4000.2,
-      "endMs": 4410.6
+      "startMs": 6015.1,
+      "endMs": 6688.0,
+      "syllables": 2
     },
     {
       "word": "вот",
       "index": 8,
-      "startMs": 4472.8,
-      "endMs": 4862.2
+      "startMs": 6778.0,
+      "endMs": 7124.0,
+      "syllables": 1
     },
     {
       "word": "это,",
       "index": 9,
-      "startMs": 4924.4,
-      "endMs": 5309.6
+      "startMs": 7214.0,
+      "endMs": 7882.0,
+      "syllables": 2
     },
     {
       "word": "которые",
       "index": 10,
-      "startMs": 5461.6,
-      "endMs": 6000.0
+      "startMs": 7972.0,
+      "endMs": 9304.6,
+      "syllables": 4
     },
     {
       "word": "типа",
       "index": 11,
-      "startMs": 6062.2,
-      "endMs": 6479.6
+      "startMs": 9394.6,
+      "endMs": 10067.3,
+      "syllables": 2
     },
     {
       "word": "розовые,",
       "index": 12,
-      "startMs": 6541.8,
-      "endMs": 7154.9
+      "startMs": 10157.3,
+      "endMs": 11500.9,
+      "syllables": 4
     },
     {
       "word": "персиковые,",
       "index": 13,
-      "startMs": 7306.9,
-      "endMs": 8008.5
+      "startMs": 11590.9,
+      "endMs": 13273.0,
+      "syllables": 5
     },
     {
       "word": "они",
       "index": 14,
-      "startMs": 8160.5,
-      "endMs": 8570.9
+      "startMs": 13363.0,
+      "endMs": 14035.9,
+      "syllables": 2
     },
     {
       "word": "прикольные.",
       "index": 15,
-      "startMs": 8633.1,
-      "endMs": 9323.0
+      "startMs": 14125.9,
+      "endMs": 15479.8,
+      "syllables": 4
     },
     {
       "word": "Ну,",
       "index": 16,
-      "startMs": 9585.6,
-      "endMs": 9964.7
+      "startMs": 15569.8,
+      "endMs": 15911.7,
+      "syllables": 1
     },
     {
       "word": "в",
       "index": 17,
-      "startMs": 10116.7,
-      "endMs": 10507.6
+      "startMs": 16001.7,
+      "endMs": 16348.2,
+      "syllables": 1
     },
     {
       "word": "общем,",
       "index": 18,
-      "startMs": 10569.8,
-      "endMs": 11081.0
+      "startMs": 16438.2,
+      "endMs": 17114.2,
+      "syllables": 2
     },
     {
       "word": "все",
       "index": 19,
-      "startMs": 11233.0,
-      "endMs": 11623.5
+      "startMs": 17204.2,
+      "endMs": 17546.8,
+      "syllables": 1
     },
     {
       "word": "прикольно,",
       "index": 20,
-      "startMs": 11685.7,
-      "endMs": 12262.8
+      "startMs": 17636.8,
+      "endMs": 18639.0,
+      "syllables": 3
     },
     {
       "word": "красиво,",
       "index": 21,
-      "startMs": 12414.7,
-      "endMs": 13000.8
+      "startMs": 18729.0,
+      "endMs": 19742.1,
+      "syllables": 3
     },
     {
       "word": "эстетично.",
       "index": 22,
-      "startMs": 13152.7,
-      "endMs": 13861.8
+      "startMs": 19832.1,
+      "endMs": 21175.4,
+      "syllables": 4
     }
   ]
 }

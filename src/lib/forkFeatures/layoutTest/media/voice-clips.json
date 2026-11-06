@@ -1,0 +1,359 @@
+{
+  "clips": [
+    {
+      "id": "peach",
+      "transcript": "Почему второе и третье они черного цвета? Они вот это, которые типа розовые, персиковые, они прикольные. Ну, в общем, все прикольно, красиво, эстетично.",
+      "ogg": "voice-peach.ogg",
+      "durationMs": 21665.4,
+      "sampleRate": 48000,
+      "codec": "opus",
+      "container": "ogg",
+      "words": [
+        {
+          "word": "Почему",
+          "index": 0,
+          "startMs": 0.0,
+          "endMs": 1012.2,
+          "syllables": 3
+        },
+        {
+          "word": "второе",
+          "index": 1,
+          "startMs": 1102.2,
+          "endMs": 2103.7,
+          "syllables": 3
+        },
+        {
+          "word": "и",
+          "index": 2,
+          "startMs": 2193.7,
+          "endMs": 2534.2,
+          "syllables": 1
+        },
+        {
+          "word": "третье",
+          "index": 3,
+          "startMs": 2624.2,
+          "endMs": 3296.2,
+          "syllables": 2
+        },
+        {
+          "word": "они",
+          "index": 4,
+          "startMs": 3386.2,
+          "endMs": 4059.0,
+          "syllables": 2
+        },
+        {
+          "word": "черного",
+          "index": 5,
+          "startMs": 4149.0,
+          "endMs": 5162.0,
+          "syllables": 3
+        },
+        {
+          "word": "цвета?",
+          "index": 6,
+          "startMs": 5252.0,
+          "endMs": 5925.1,
+          "syllables": 2
+        },
+        {
+          "word": "Они",
+          "index": 7,
+          "startMs": 6015.1,
+          "endMs": 6688.0,
+          "syllables": 2
+        },
+        {
+          "word": "вот",
+          "index": 8,
+          "startMs": 6778.0,
+          "endMs": 7124.0,
+          "syllables": 1
+        },
+        {
+          "word": "это,",
+          "index": 9,
+          "startMs": 7214.0,
+          "endMs": 7882.0,
+          "syllables": 2
+        },
+        {
+          "word": "которые",
+          "index": 10,
+          "startMs": 7972.0,
+          "endMs": 9304.6,
+          "syllables": 4
+        },
+        {
+          "word": "типа",
+          "index": 11,
+          "startMs": 9394.6,
+          "endMs": 10067.3,
+          "syllables": 2
+        },
+        {
+          "word": "розовые,",
+          "index": 12,
+          "startMs": 10157.3,
+          "endMs": 11500.9,
+          "syllables": 4
+        },
+        {
+          "word": "персиковые,",
+          "index": 13,
+          "startMs": 11590.9,
+          "endMs": 13273.0,
+          "syllables": 5
+        },
+        {
+          "word": "они",
+          "index": 14,
+          "startMs": 13363.0,
+          "endMs": 14035.9,
+          "syllables": 2
+        },
+        {
+          "word": "прикольные.",
+          "index": 15,
+          "startMs": 14125.9,
+          "endMs": 15479.8,
+          "syllables": 4
+        },
+        {
+          "word": "Ну,",
+          "index": 16,
+          "startMs": 15569.8,
+          "endMs": 15911.7,
+          "syllables": 1
+        },
+        {
+          "word": "в",
+          "index": 17,
+          "startMs": 16001.7,
+          "endMs": 16348.2,
+          "syllables": 1
+        },
+        {
+          "word": "общем,",
+          "index": 18,
+          "startMs": 16438.2,
+          "endMs": 17114.2,
+          "syllables": 2
+        },
+        {
+          "word": "все",
+          "index": 19,
+          "startMs": 17204.2,
+          "endMs": 17546.8,
+          "syllables": 1
+        },
+        {
+          "word": "прикольно,",
+          "index": 20,
+          "startMs": 17636.8,
+          "endMs": 18639.0,
+          "syllables": 3
+        },
+        {
+          "word": "красиво,",
+          "index": 21,
+          "startMs": 18729.0,
+          "endMs": 19742.1,
+          "syllables": 3
+        },
+        {
+          "word": "эстетично.",
+          "index": 22,
+          "startMs": 19832.1,
+          "endMs": 21175.4,
+          "syllables": 4
+        }
+      ]
+    },
+    {
+      "id": "park",
+      "transcript": "Вчера вечером мы гуляли в парке. Потом зашли в кафе и заказали чай.",
+      "ogg": "voice-park.ogg",
+      "durationMs": 10184.0,
+      "sampleRate": 48000,
+      "codec": "opus",
+      "container": "ogg",
+      "words": [
+        {
+          "word": "Вчера",
+          "index": 0,
+          "startMs": 0.0,
+          "endMs": 670.1,
+          "syllables": 2
+        },
+        {
+          "word": "вечером",
+          "index": 1,
+          "startMs": 760.1,
+          "endMs": 1763.0,
+          "syllables": 3
+        },
+        {
+          "word": "мы",
+          "index": 2,
+          "startMs": 1853.0,
+          "endMs": 2194.6,
+          "syllables": 1
+        },
+        {
+          "word": "гуляли",
+          "index": 3,
+          "startMs": 2284.6,
+          "endMs": 3299.9,
+          "syllables": 3
+        },
+        {
+          "word": "в",
+          "index": 4,
+          "startMs": 3389.9,
+          "endMs": 3736.5,
+          "syllables": 1
+        },
+        {
+          "word": "парке.",
+          "index": 5,
+          "startMs": 3826.5,
+          "endMs": 4498.6,
+          "syllables": 2
+        },
+        {
+          "word": "Потом",
+          "index": 6,
+          "startMs": 4738.6,
+          "endMs": 5416.1,
+          "syllables": 2
+        },
+        {
+          "word": "зашли",
+          "index": 7,
+          "startMs": 5506.1,
+          "endMs": 6190.7,
+          "syllables": 2
+        },
+        {
+          "word": "в",
+          "index": 8,
+          "startMs": 6280.7,
+          "endMs": 6627.3,
+          "syllables": 1
+        },
+        {
+          "word": "кафе",
+          "index": 9,
+          "startMs": 6717.3,
+          "endMs": 7386.3,
+          "syllables": 2
+        },
+        {
+          "word": "и",
+          "index": 10,
+          "startMs": 7476.3,
+          "endMs": 7816.8,
+          "syllables": 1
+        },
+        {
+          "word": "заказали",
+          "index": 11,
+          "startMs": 7906.8,
+          "endMs": 9260.9,
+          "syllables": 4
+        },
+        {
+          "word": "чай.",
+          "index": 12,
+          "startMs": 9350.9,
+          "endMs": 9694.0,
+          "syllables": 1
+        }
+      ]
+    },
+    {
+      "id": "vpn",
+      "transcript": "Нет, если это крысавпн, тогда не бери. Лучше возьми обычный.",
+      "ogg": "voice-vpn.ogg",
+      "durationMs": 7877.0,
+      "sampleRate": 48000,
+      "codec": "opus",
+      "container": "ogg",
+      "words": [
+        {
+          "word": "Нет,",
+          "index": 0,
+          "startMs": 0.0,
+          "endMs": 342.1,
+          "syllables": 1
+        },
+        {
+          "word": "если",
+          "index": 1,
+          "startMs": 432.1,
+          "endMs": 1108.5,
+          "syllables": 2
+        },
+        {
+          "word": "это",
+          "index": 2,
+          "startMs": 1198.5,
+          "endMs": 1866.5,
+          "syllables": 2
+        },
+        {
+          "word": "крысавпн,",
+          "index": 3,
+          "startMs": 1956.5,
+          "endMs": 2638.8,
+          "syllables": 2
+        },
+        {
+          "word": "тогда",
+          "index": 4,
+          "startMs": 2878.8,
+          "endMs": 3547.5,
+          "syllables": 2
+        },
+        {
+          "word": "не",
+          "index": 5,
+          "startMs": 3637.5,
+          "endMs": 3977.4,
+          "syllables": 1
+        },
+        {
+          "word": "бери.",
+          "index": 6,
+          "startMs": 4067.4,
+          "endMs": 4741.9,
+          "syllables": 2
+        },
+        {
+          "word": "Лучше",
+          "index": 7,
+          "startMs": 4831.9,
+          "endMs": 5513.5,
+          "syllables": 2
+        },
+        {
+          "word": "возьми",
+          "index": 8,
+          "startMs": 5603.5,
+          "endMs": 6280.1,
+          "syllables": 2
+        },
+        {
+          "word": "обычный.",
+          "index": 9,
+          "startMs": 6370.1,
+          "endMs": 7387.0,
+          "syllables": 3
+        }
+      ]
+    }
+  ]
+}

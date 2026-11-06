@@ -12,14 +12,14 @@ Karaoke-style read-along on a voice-message transcription.
 
 - **Where:** inside a voice-message bubble, after you tap the existing transcribe button.
 - **What:** once Telegram returns the transcript, each word is a tap target. The current word highlights in the bubble accent while the clip plays; spoken words stay readable. Tap a word to seek and play from there.
-- **Limitation:** `messages.transcribeAudio` returns plain text, not word timestamps, and it is a Telegram Premium API. Tokens are packed along speech-only time and snapped to energy onsets, so a tap starts on that word (≤50ms silence preroll, never the previous token). Without Premium or a cached transcript the upstream upsell still appears.
+- **Limitation:** `messages.transcribeAudio` returns plain text, not word timestamps, and it is a Telegram Premium API. Tokens are placed by syllable weight across the real media duration (Opus/`HTMLMediaElement.duration`), then each start snaps to the nearest energy onset within ±250 ms. Highlight and seek share that one map, so a tap on word N lights word N and starts there. Without Premium or a cached transcript the upstream upsell still appears.
 
 ### 2. Reply Loom
 
 A thread sheet for ordinary reply chains (not only channel comments).
 
 - **Where:** long-press a message (mouse or touch), or right-click → **Thread**. A plain click on a quoted reply still jumps to and highlights that original message. The Thread item is hidden on messages that are not part of a reply chain.
-- **What:** unrelated bubbles dim. A comments-style sheet with a close **X** (Esc also closes) lists the reply **tree**: root on top, indentation and a quote on each reply showing who it answers. Avatars and names sit on chat-like bubbles. Photos and image files load through `wrapPhoto` / `wrapDocument` at bubble resolution, not the 40px chat thumb. The sheet sits `position: fixed` in the chat column, from below the topbar and pinned plate down to the composer **including** the Reply-to helper.
+- **What:** unrelated bubbles dim. A comments-style sheet with a close **X** (Esc also closes) lists the reply **tree**: root on top, indentation, and SVG connector lines that run from one avatar centre to the next. Each reply quotes who it answers. Avatars load through `avatarNew` (the same photos as the chat list); letters are only used when someone has no photo. Photos and image files load through `wrapPhoto` / `wrapDocument` at bubble resolution, not the 40px chat thumb. The sheet sits `position: fixed` in the chat column, from below the topbar and pinned plate down to the composer **including** the Reply-to helper.
 - **Limitation:** Telegram does not expose a “replies to this mid” search for private chats. The loom walks `reply_to` / `reply_to_mid` on messages already loaded (on screen or in the history cache). Send or scroll to load more of the chain, then reopen.
 
 ### 3. Fan

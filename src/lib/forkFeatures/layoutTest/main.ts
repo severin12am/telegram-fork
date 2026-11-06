@@ -7,13 +7,25 @@ import VoiceScoreWords from '@lib/forkFeatures/voiceScore/VoiceScoreWords';
 import {
   PERSKOVYE_INDEX,
   ROZOVYE_INDEX,
-  RUSSIAN_VOICE_TRANSCRIPT,
   SECOND_ONI_INDEX
 } from '@lib/forkFeatures/layoutTest/transcript';
-import voiceOnsets from './media/russian-voice-onsets.json';
-import voiceUrl from './media/russian-voice.wav?url';
+import voiceClips from './media/voice-clips.json';
+import peachUrl from './media/voice-peach.ogg?url';
+import parkUrl from './media/voice-park.ogg?url';
+import vpnUrl from './media/voice-vpn.ogg?url';
 import fullPhotoUrl from './media/full-photo.jpg?url';
 import thumbUrl from './media/full-photo-thumb.jpg?url';
+import avatarIlia from './media/avatar-ilia.jpg?url';
+import avatarYou from './media/avatar-you.jpg?url';
+import avatarPatimat from './media/avatar-patimat.jpg?url';
+import avatarMaya from './media/avatar-maya.jpg?url';
+import avatarJules from './media/avatar-jules.jpg?url';
+
+const VOICE_URLS: Record<string, string> = {
+  peach: peachUrl,
+  park: parkUrl,
+  vpn: vpnUrl
+};
 
 document.documentElement.classList.add('night');
 document.body.classList.add('animation-level-2', 'night');
@@ -124,7 +136,8 @@ type FakeMessage = {
   },
   __fullMediaUrl?: string,
   __mediaWidth?: number,
-  __mediaHeight?: number
+  __mediaHeight?: number,
+  __avatarUrl?: string
 };
 
 const thread: FakeMessage[] = [
@@ -153,13 +166,14 @@ const thread: FakeMessage[] = [
     },
     __fullMediaUrl: fullPhotoUrl,
     __mediaWidth: 1280,
-    __mediaHeight: 720
+    __mediaHeight: 720,
+    __avatarUrl: avatarIlia
   },
-  {_: 'message', mid: 101, peerId: 1, fromId: 1, date: 1710000600, message: 'Нет, если это крысавпн! https://t.me/krisaVPN_bot?start=i7Z78KsH', pFlags: {out: true}, reply_to_mid: 100, reply_to: {_: 'messageReplyHeader', reply_to_msg_id: 100, reply_to_top_id: 100}, __senderName: 'You'},
-  {_: 'message', mid: 102, peerId: 1, fromId: 12, date: 1710001200, message: 'That JPEG is the lockbox photo. Keep the original, not the thumb.', pFlags: {}, reply_to_mid: 101, reply_to: {_: 'messageReplyHeader', reply_to_msg_id: 101, reply_to_top_id: 100}, __senderName: 'Патимат Гатиева'},
-  {_: 'message', mid: 103, peerId: 1, fromId: 13, date: 1710001800, message: 'I will print it before we leave.', pFlags: {}, reply_to_mid: 102, reply_to: {_: 'messageReplyHeader', reply_to_msg_id: 102, reply_to_top_id: 100}, __senderName: 'Maya Chen'},
-  {_: 'message', mid: 104, peerId: 1, fromId: 1, date: 1710002100, message: 'Maya, take the spare key too.', pFlags: {out: true}, reply_to_mid: 101, reply_to: {_: 'messageReplyHeader', reply_to_msg_id: 101, reply_to_top_id: 100}, __senderName: 'You'},
-  {_: 'message', mid: 105, peerId: 1, fromId: 14, date: 1710002700, message: 'On the 4:10. Save me a bunk.', pFlags: {}, reply_to_mid: 100, reply_to: {_: 'messageReplyHeader', reply_to_msg_id: 100, reply_to_top_id: 100}, __senderName: 'Jules Adeyemi'}
+  {_: 'message', mid: 101, peerId: 1, fromId: 1, date: 1710000600, message: 'Нет, если это крысавпн! https://t.me/krisaVPN_bot?start=i7Z78KsH', pFlags: {out: true}, reply_to_mid: 100, reply_to: {_: 'messageReplyHeader', reply_to_msg_id: 100, reply_to_top_id: 100}, __senderName: 'You', __avatarUrl: avatarYou},
+  {_: 'message', mid: 102, peerId: 1, fromId: 12, date: 1710001200, message: 'That JPEG is the lockbox photo. Keep the original, not the thumb.', pFlags: {}, reply_to_mid: 101, reply_to: {_: 'messageReplyHeader', reply_to_msg_id: 101, reply_to_top_id: 100}, __senderName: 'Патимат Гатиева', __avatarUrl: avatarPatimat},
+  {_: 'message', mid: 103, peerId: 1, fromId: 13, date: 1710001800, message: 'I will print it before we leave.', pFlags: {}, reply_to_mid: 102, reply_to: {_: 'messageReplyHeader', reply_to_msg_id: 102, reply_to_top_id: 100}, __senderName: 'Maya Chen', __avatarUrl: avatarMaya},
+  {_: 'message', mid: 104, peerId: 1, fromId: 1, date: 1710002100, message: 'Maya, take the spare key too.', pFlags: {out: true}, reply_to_mid: 101, reply_to: {_: 'messageReplyHeader', reply_to_msg_id: 101, reply_to_top_id: 100}, __senderName: 'You', __avatarUrl: avatarYou},
+  {_: 'message', mid: 105, peerId: 1, fromId: 14, date: 1710002700, message: 'On the 4:10. Save me a bunk.', pFlags: {}, reply_to_mid: 100, reply_to: {_: 'messageReplyHeader', reply_to_msg_id: 100, reply_to_top_id: 100}, __senderName: 'Jules Adeyemi', __avatarUrl: avatarJules}
 ];
 
 const byMid = new Map(thread.map((message) => [message.mid, message]));
@@ -183,11 +197,13 @@ for(const message of thread) {
 }
 
 const view = new URLSearchParams(location.search).get('view') || 'thread';
+const clipId = new URLSearchParams(location.search).get('clip') || 'peach';
+const voiceClip = voiceClips.clips.find((clip) => clip.id === clipId) || voiceClips.clips[0];
 const seed = byMid.get(103)!;
 const voiceRow = el('div', 'audio audio-voice') as HTMLElement & {audio?: HTMLMediaElement};
 const audio = el('audio') as HTMLAudioElement;
 audio.preload = 'auto';
-audio.src = voiceUrl;
+audio.src = VOICE_URLS[voiceClip.id] || peachUrl;
 voiceRow.audio = audio;
 const wordsHost = el('div');
 wordsHost.dataset.forkProbe = 'voice-words';
@@ -211,8 +227,8 @@ if(view === 'voice') {
   voiceBubble.append(voiceRow);
   chatInner.replaceChildren(voiceBubble, voiceStatus);
   render(() => createComponent(VoiceScoreWords, {
-    text: RUSSIAN_VOICE_TRANSCRIPT,
-    durationSec: (voiceOnsets.durationMs as number) / 1000,
+    text: voiceClip.transcript,
+    durationSec: 0,
     row: () => voiceRow
   }), wordsHost);
 } else {
@@ -263,6 +279,38 @@ function measure() {
     replyTo: node.dataset.replyTo || '',
     name: node.querySelector('.reply-loom-sender')?.textContent || ''
   }));
+  const body = document.querySelector<HTMLElement>('[data-fork-probe="thread-body"]');
+  const bodyBox = body?.getBoundingClientRect();
+  const avatars = Array.from(document.querySelectorAll<HTMLElement>('.reply-loom-avatar-slot')).map((slot) => {
+    const box = slot.getBoundingClientRect();
+    const img = slot.querySelector<HTMLImageElement>('img');
+    return {
+      mid: slot.closest<HTMLElement>('.reply-loom-row')?.dataset.mid || '',
+      hasPhoto: slot.dataset.hasPhoto === '1' || !!(img && img.naturalWidth > 8),
+      naturalWidth: img?.naturalWidth || 0,
+      cx: bodyBox ? box.left - bodyBox.left + (body?.scrollLeft || 0) + box.width / 2 : box.left + box.width / 2,
+      cy: bodyBox ? box.top - bodyBox.top + (body?.scrollTop || 0) + box.height / 2 : box.top + box.height / 2,
+      fallback: slot.dataset.fallback || ''
+    };
+  });
+  const connectors = Array.from(document.querySelectorAll<SVGPathElement>('.reply-loom-tree path')).map((path) => {
+    const from = path.getAttribute('data-from');
+    const to = path.getAttribute('data-to');
+    const parent = avatars.find((item) => item.mid === from);
+    const child = avatars.find((item) => item.mid === to);
+    const startOff = parent ? Math.hypot(0, 0) : Infinity;
+    return {
+      from,
+      to,
+      parentCx: parent?.cx,
+      parentCy: parent?.cy,
+      childCx: child?.cx,
+      childCy: child?.cy,
+      d: path.getAttribute('d') || '',
+      startOff,
+      centered: !!(parent && child)
+    };
+  });
   const report = {
     viewport: {width: window.innerWidth, height: window.innerHeight},
     sidebarRight: leftBox.right,
@@ -281,11 +329,15 @@ function measure() {
     quotes,
     participants: Number(people || 0),
     depths,
+    avatars,
+    connectors,
+    photos: avatars.filter((item) => item.hasPhoto).length,
     overflow,
     persikIndex: PERSKOVYE_INDEX,
     rozovyeIndex: ROZOVYE_INDEX,
     oniIndex: SECOND_ONI_INDEX,
-    truth: voiceOnsets.words
+    clipId: voiceClip.id,
+    truth: voiceClip.words
   };
   const photoNote = report.photo ? ` photo ${report.photo.naturalWidth}x${report.photo.naturalHeight}` : '';
   probe.textContent = `${report.viewport.width}×${report.viewport.height} sheet ${sheetBox ? `${Math.round(sheetBox.left)},${Math.round(sheetBox.top)} ${Math.round(sheetBox.width)}×${Math.round(sheetBox.height)}` : 'none'} overflow L${overflow.left.toFixed(0)} R${overflow.right.toFixed(0)} T${overflow.top.toFixed(0)} B${overflow.bottom.toFixed(0)}${photoNote}`;
@@ -308,23 +360,43 @@ if(view === 'voice') {
 
     const startMs = Number(button.dataset.startMs || 0);
     const index = Number(button.dataset.wordIndex || -1);
-    const truth = (voiceOnsets.words as Array<{startMs: number, word: string}>)[index];
-    const stamp = () => {
+    voiceStatus.removeAttribute('data-delta-ms');
+    voiceStatus.removeAttribute('data-current-ms');
+    voiceStatus.dataset.wordIndex = String(index);
+    const truth = (voiceClip.words as Array<{startMs: number, word: string}>)[index];
+    const stamp = (settled: boolean) => {
       const t = audioEl.currentTime;
       const alignedDelta = Math.abs(t * 1000 - startMs);
       const truthDelta = truth ? Math.abs(t * 1000 - truth.startMs) : alignedDelta;
-      voiceStatus.textContent = `word ${index} ${button.textContent} → ${t.toFixed(3)}s aligned ${startMs}ms truth ${truth?.startMs ?? '?'} Δ${truthDelta.toFixed(0)}ms`;
+      const highlighted = document.querySelector('.voice-score-word-now');
+      const highlightIndexAttr = highlighted?.getAttribute('data-word-index');
+      const highlightOk = highlightIndexAttr === String(index);
+      voiceStatus.textContent = `word ${index} ${button.textContent} → ${t.toFixed(3)}s aligned ${startMs}ms truth ${truth?.startMs ?? '?'} Δ${truthDelta.toFixed(0)}ms hl ${highlightIndexAttr ?? 'none'}`;
       voiceStatus.dataset.wordIndex = String(index);
+      voiceStatus.dataset.highlightIndex = highlightIndexAttr || '';
+      voiceStatus.dataset.highlightOk = highlightOk ? '1' : '0';
+      voiceStatus.dataset.truthMs = String(Math.round(truth?.startMs ?? startMs));
+      if(!settled) {
+        return;
+      }
+
       voiceStatus.dataset.deltaMs = String(Math.round(truthDelta));
       voiceStatus.dataset.alignedDeltaMs = String(Math.round(alignedDelta));
       voiceStatus.dataset.currentMs = String(Math.round(t * 1000));
-      voiceStatus.dataset.truthMs = String(Math.round(truth?.startMs ?? startMs));
     };
 
-    audioEl.addEventListener('seeked', stamp, {once: true});
-    queueMicrotask(stamp);
-    setTimeout(stamp, 80);
-    setTimeout(stamp, 180);
+    audioEl.addEventListener('seeked', () => stamp(true), {once: true});
+    queueMicrotask(() => stamp(false));
+    const alreadyThere = Math.abs(audioEl.currentTime * 1000 - startMs) < 40;
+    if(alreadyThere) {
+      stamp(true);
+    } else {
+      setTimeout(() => {
+        if(voiceStatus.getAttribute('data-delta-ms') == null) {
+          stamp(true);
+        }
+      }, 250);
+    }
   }, true);
 }
 

@@ -38,14 +38,8 @@ type SeekableAudio = {
   play?: () => unknown
 };
 
-function minAllowedSec(word: VoiceScoreWord, previous?: VoiceScoreWord): number {
-  const onset = word.startMs / 1000;
-  return Math.max(0, onset - prerollMsForWord(word, previous) / 1000);
-}
-
 /**
- * Seek `audio` so playback starts on the clicked word's speech onset
- * (or a ≤50ms silence preroll that does not include the previous word).
+ * Seek `audio` to the clicked word's start on the same map the highlighter uses.
  */
 export function seekAudioToWord(
   audio: SeekableAudio,
@@ -55,44 +49,50 @@ export function seekAudioToWord(
   const durationSec = Number.isFinite(audio.duration) && (audio.duration as number) > 0 ?
     audio.duration as number :
     undefined;
-  const onset = word.startMs / 1000;
-  const end = Math.max(onset, word.endMs / 1000);
-  const span = Math.max(0, end - onset);
-  const minAllowed = minAllowedSec(word, previous);
+  const onset = Math.max(0, word.startMs / 1000);
+  const minAllowed = Math.max(0, onset - prerollMsForWord(word, previous) / 1000);
   let seconds = toMediaSeconds(seekSecondsForWord(word, previous), durationSec);
 
   if(seconds < minAllowed) {
     seconds = minAllowed;
   }
 
-  if(seconds > onset + WORD_ONSET_SEEK_SLACK_MS / 1000) {
-    seconds = onset + Math.min(0.02, WORD_ONSET_SEEK_SLACK_MS / 1000 - 0.01);
+  if(previous && seconds * 1000 + 1 < previous.endMs) {
+    seconds = onset;
   }
 
-  if(seconds >= end && span > 0) {
-    seconds = Math.max(minAllowed, onset);
+  if(seconds > onset + WORD_ONSET_SEEK_SLACK_MS / 1000) {
+    seconds = onset;
   }
 
   let target = seconds;
-  for(let i = 0; i < 8; i++) {
+  for(let i = 0; i < 10; i++) {
     audio.currentTime = target;
     if(audio.currentTime >= minAllowed - 1e-4) {
       break;
     }
 
     const deficit = minAllowed - audio.currentTime;
-    target = Math.min(
-      onset + WORD_ONSET_SEEK_SLACK_MS / 1000 - 0.005,
-      target + deficit + 0.01
-    );
-  }
-
-  if(audio.currentTime > onset + WORD_ONSET_SEEK_SLACK_MS / 1000 && span > WORD_ONSET_SEEK_SLACK_MS / 1000) {
-    audio.currentTime = onset + 0.012;
+    target = Math.min(onset + WORD_ONSET_SEEK_SLACK_MS / 1000, target + deficit + 0.012);
   }
 
   if(previous && audio.currentTime * 1000 + 1 < previous.endMs) {
-    audio.currentTime = Math.max(minAllowed, onset);
+    audio.currentTime = onset;
+  }
+
+  if(audio.currentTime + 0.12 < onset && onset - audio.currentTime < 0.25) {
+    audio.currentTime = onset;
+  }
+
+  if(audio.currentTime > onset + 0.06) {
+    audio.currentTime = onset;
+    if(audio.currentTime > onset + 0.06) {
+      audio.currentTime = Math.max(minAllowed, onset - 0.04);
+    }
+  }
+
+  if(durationSec && durationSec > 0.4 && audio.currentTime > durationSec - 0.12 && onset < durationSec - 0.25) {
+    audio.currentTime = onset;
   }
 
   return audio.currentTime;

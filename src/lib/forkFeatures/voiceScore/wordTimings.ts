@@ -12,11 +12,24 @@ export type TranscriptToken = {
 };
 
 const TOKEN_RE = /(\S+)(\s*)/g;
+const VOWEL_RE = /[аеёиоуыэюяaeiouy]/gi;
 
 /** A seek may sit this far after the word's speech onset, never before it except preroll. */
 export const WORD_ONSET_SEEK_SLACK_MS = 100;
 /** Silence before the onset, never into the previous word. */
 export const WORD_PREROLL_MS = 50;
+/** Local onset snap around the proportional start. Never jump a whole segment. */
+export const SNAP_WINDOW_MS = 250;
+
+export function syllableWeight(word: string): number {
+  const letters = word.replace(/[^\p{L}]/gu, '');
+  if(!letters) {
+    return 1;
+  }
+
+  const vowels = letters.match(VOWEL_RE);
+  return Math.max(1, vowels ? vowels.length : 1);
+}
 
 export function tokenizeTranscript(text: string): TranscriptToken[] {
   const tokens: TranscriptToken[] = [];
@@ -26,7 +39,7 @@ export function tokenizeTranscript(text: string): TranscriptToken[] {
     tokens.push({
       word: match[1],
       trailing: match[2] || '',
-      weight: 180 + match[1].length * 46
+      weight: syllableWeight(match[1])
     });
   }
 
@@ -88,6 +101,28 @@ export function wordIndexAtTime(words: VoiceScoreWord[], timeMs: number): number
   return words.length - 1;
 }
 
+/**
+ * Highlight and seek share this index. A click pins word N until the playhead
+ * has actually left it, so a late `timeupdate` cannot light up a neighbour.
+ */
+export function highlightIndex(
+  words: VoiceScoreWord[],
+  timeMs: number,
+  pinnedIndex = -1
+): number {
+  if(pinnedIndex >= 0 && pinnedIndex < words.length) {
+    if(timeMs < 0) {
+      return pinnedIndex;
+    }
+
+    if(timeMs < words[pinnedIndex].endMs) {
+      return pinnedIndex;
+    }
+  }
+
+  return wordIndexAtTime(words, timeMs);
+}
+
 export function prerollMsForWord(word: VoiceScoreWord, previous?: VoiceScoreWord): number {
   const onset = Math.max(0, word.startMs);
   if(!previous) {
@@ -114,12 +149,11 @@ export function seekMsForWord(word: VoiceScoreWord, previous?: VoiceScoreWord): 
 
   const end = Math.max(onset, word.endMs);
   const span = end - onset;
-  if(!(span > 0)) {
+  if(!(span > 2)) {
     return onset;
   }
 
-  const epsilon = Math.min(16, Math.max(6, span * 0.015), WORD_ONSET_SEEK_SLACK_MS - 1, Math.max(1, span - 1));
-  return Math.min(onset + epsilon, end - Math.min(1, span / 4));
+  return Math.min(onset + 2, end - 1);
 }
 
 export function seekIsNearOnset(
