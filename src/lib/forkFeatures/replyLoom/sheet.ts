@@ -13,6 +13,7 @@ import {
 } from '@lib/forkFeatures/replyLoom/collectThread';
 import {isForkFeatureEnabled} from '@lib/forkFeatures/flags';
 import {forkLabel} from '@lib/forkFeatures/label';
+import {layoutReplyLoomSheet} from '@lib/forkFeatures/replyLoom/fitSheet';
 
 export type ReplyLoomHost = {
   container: HTMLElement,
@@ -69,12 +70,23 @@ function senderLabel(message: Message.message | undefined): string {
     return '';
   }
 
+  const named = (message as Message.message & {__senderName?: string}).__senderName;
+  if(named) {
+    return named;
+  }
+
   const peerId = message.fromId ?? message.peerId;
   if(!peerId) {
     return '';
   }
 
-  const peer = apiManagerProxy.getPeer(peerId);
+  let peer: any;
+  try {
+    peer = apiManagerProxy.getPeer(peerId);
+  } catch(_err) {
+    return '';
+  }
+
   if(!peer) {
     return '';
   }
@@ -175,6 +187,8 @@ export class ReplyLoomController {
   private open = false;
   private seedMid = 0;
   private chatEl: HTMLElement | null = null;
+  private resizeObserver?: ResizeObserver;
+  private onViewport = () => this.layout();
 
   public rebind(host: ReplyLoomHost) {
     this.host = host;
@@ -182,12 +196,20 @@ export class ReplyLoomController {
     if(this.sheet.parentElement !== parent) {
       parent.append(this.sheet);
     }
+
+    this.chatEl = host.container.closest('.chat') || host.container;
+    this.unwatchLayout();
+    this.watchLayout();
+    if(this.open) {
+      this.layout();
+    }
   }
 
   constructor(private host: ReplyLoomHost) {
     this.sheet = document.createElement('div');
     this.sheet.className = 'reply-loom-sheet';
     this.sheet.dataset.forkFeature = 'reply-loom';
+    this.sheet.dataset.forkProbe = 'thread-sheet';
     this.sheet.setAttribute('role', 'dialog');
     this.sheet.setAttribute('aria-label', 'Thread');
 
@@ -207,9 +229,11 @@ export class ReplyLoomController {
 
     this.body = document.createElement('div');
     this.body.className = 'reply-loom-sheet-body';
+    this.body.dataset.forkProbe = 'thread-body';
 
     this.sheet.append(head, this.body);
     this.mountParent().append(this.sheet);
+    this.watchLayout();
   }
 
   public isOpen() {
@@ -233,10 +257,12 @@ export class ReplyLoomController {
     this.seedMid = message.mid;
     this.open = true;
     this.render(message);
-    this.sheet.classList.add('is-open');
+    this.chatEl = this.host.container.closest('.chat') || this.mountParent();
+    this.chatEl.classList.add('has-reply-loom');
     this.host.container.classList.add('has-reply-loom');
-    this.chatEl = this.host.container.closest('.chat');
-    this.chatEl?.classList.add('has-reply-loom');
+    this.layout();
+    this.sheet.classList.add('is-open');
+    requestAnimationFrame(() => this.layout());
     if(!liteMode.isAvailable('motion')) {
       this.sheet.classList.add('no-motion');
     }
@@ -270,11 +296,49 @@ export class ReplyLoomController {
 
   public destroy() {
     this.close();
+    this.unwatchLayout();
     this.sheet.remove();
   }
 
   private mountParent(): HTMLElement {
-    return this.host.container.closest('.chat') || this.host.container;
+    return document.getElementById('page-chats') ||
+      document.body ||
+      this.host.container.closest('.chat') ||
+      this.host.container;
+  }
+
+  private layout() {
+    const chat = this.chatEl || this.mountParent();
+    if(!chat) {
+      return;
+    }
+
+    layoutReplyLoomSheet(this.sheet, chat);
+  }
+
+  private watchLayout() {
+    if(typeof ResizeObserver !== 'undefined' && !this.resizeObserver) {
+      this.resizeObserver = new ResizeObserver(() => this.layout());
+      const chat = this.host.container.closest('.chat') || this.host.container;
+      this.resizeObserver.observe(chat);
+      this.resizeObserver.observe(this.mountParent());
+      const bubbles = chat.querySelector('.bubbles');
+      if(bubbles) {
+        this.resizeObserver.observe(bubbles);
+      }
+      const sidebar = document.getElementById('column-left');
+      if(sidebar) {
+        this.resizeObserver.observe(sidebar);
+      }
+    }
+
+    window.addEventListener('resize', this.onViewport);
+  }
+
+  private unwatchLayout() {
+    this.resizeObserver?.disconnect();
+    this.resizeObserver = undefined;
+    window.removeEventListener('resize', this.onViewport);
   }
 
   private render(seed: Message.message) {

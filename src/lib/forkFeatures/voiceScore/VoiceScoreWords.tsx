@@ -1,8 +1,9 @@
 import {createEffect, createMemo, createSignal, For, onCleanup} from 'solid-js';
 import setCurrentTime from '@helpers/dom/setCurrentTime';
 import {isForkFeatureEnabled} from '@lib/forkFeatures/flags';
-import {estimateWordTimings, VoiceScoreWord, wordClassAtTime} from '@lib/forkFeatures/voiceScore/wordTimings';
+import {estimateWordTimings, seekIsNearOnset, VoiceScoreWord, wordClassAtTime} from '@lib/forkFeatures/voiceScore/wordTimings';
 import {durationMsFromSeconds, seekAudioToWord, seekSecondsForWord} from '@lib/forkFeatures/voiceScore/seekAudio';
+import {alignWordsToSpeech, decodeMediaPcm} from '@lib/forkFeatures/voiceScore/speechOnsets';
 
 type TranscribableRow = HTMLElement & {
   message?: {mid?: number},
@@ -16,6 +17,7 @@ export default function VoiceScoreWords(props: {
   row: () => TranscribableRow
 }) {
   const [liveDurationSec, setLiveDurationSec] = createSignal(props.durationSec || 0);
+  const [aligned, setAligned] = createSignal<VoiceScoreWord[] | undefined>();
 
   const durationSec = createMemo(() => {
     const live = liveDurationSec();
@@ -27,6 +29,11 @@ export default function VoiceScoreWords(props: {
   });
 
   const words = createMemo(() => {
+    const timed = aligned();
+    if(timed && timed.length) {
+      return timed;
+    }
+
     const ms = durationMsFromSeconds(durationSec());
     if(ms <= 0) {
       return estimateWordTimings(props.text, 1);
@@ -47,10 +54,27 @@ export default function VoiceScoreWords(props: {
       return;
     }
 
+    const text = props.text;
+    let cancelled = false;
+
     const syncDuration = () => {
       if(Number.isFinite(audio.duration) && audio.duration > 0) {
         setLiveDurationSec(audio.duration);
       }
+    };
+
+    const alignFromPcm = () => {
+      const duration = (Number.isFinite(audio.duration) && audio.duration > 0) ?
+        audio.duration :
+        durationSec();
+      decodeMediaPcm(audio).then((pcm) => {
+        if(cancelled || !pcm) {
+          return;
+        }
+
+        const ms = durationMsFromSeconds(duration) || pcm.durationMs;
+        setAligned(alignWordsToSpeech(text, ms, pcm.samples, pcm.sampleRate));
+      });
     };
 
     const onTime = () => {
@@ -63,8 +87,10 @@ export default function VoiceScoreWords(props: {
     };
 
     syncDuration();
+    alignFromPcm();
     audio.addEventListener('loadedmetadata', syncDuration);
     audio.addEventListener('durationchange', syncDuration);
+    audio.addEventListener('loadedmetadata', alignFromPcm);
     audio.addEventListener('timeupdate', onTime);
     audio.addEventListener('play', onTime);
     audio.addEventListener('pause', onTime);
@@ -73,8 +99,10 @@ export default function VoiceScoreWords(props: {
     onTime();
 
     onCleanup(() => {
+      cancelled = true;
       audio.removeEventListener('loadedmetadata', syncDuration);
       audio.removeEventListener('durationchange', syncDuration);
+      audio.removeEventListener('loadedmetadata', alignFromPcm);
       audio.removeEventListener('timeupdate', onTime);
       audio.removeEventListener('play', onTime);
       audio.removeEventListener('pause', onTime);
@@ -90,16 +118,13 @@ export default function VoiceScoreWords(props: {
       return;
     }
 
-    const duration = (Number.isFinite(audio.duration) && audio.duration > 0) ?
-      audio.duration :
-      durationSec();
-    const timed = estimateWordTimings(props.text, durationMsFromSeconds(duration) || 1);
+    const timed = words();
     const word = timed[index] || fallback;
     const seconds = seekAudioToWord(audio, word);
     setTimeMs(seconds * 1000);
 
     const correctIfEarly = () => {
-      if(audio.currentTime + 1e-3 < word.startMs / 1000) {
+      if(audio.currentTime + 1e-3 < word.startMs / 1000 || !seekIsNearOnset(word, audio.currentTime * 1000)) {
         const inner = seekSecondsForWord(word);
         setCurrentTime(audio, inner);
       }
@@ -121,7 +146,7 @@ export default function VoiceScoreWords(props: {
   };
 
   return (
-    <span class="voice-score-words" data-fork-feature="voice-score">
+    <span class="voice-score-words" data-fork-feature="voice-score" data-aligned={aligned() ? 'speech' : 'estimate'}>
       <For each={words()}>{(word, index) => {
         const cls = () => wordClassAtTime(word, timeMs());
         return (
@@ -130,6 +155,7 @@ export default function VoiceScoreWords(props: {
               type="button"
               class="voice-score-word"
               data-word-index={index()}
+              data-start-ms={String(Math.round(word.startMs))}
               classList={{
                 'voice-score-word-now': cls() === 'now',
                 'voice-score-word-said': cls() === 'said'

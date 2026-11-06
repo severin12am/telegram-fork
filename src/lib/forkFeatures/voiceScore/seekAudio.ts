@@ -1,4 +1,4 @@
-import {seekMsForWord, VoiceScoreWord, wordIndexAtTime} from '@lib/forkFeatures/voiceScore/wordTimings';
+import {seekIsNearOnset, seekMsForWord, VoiceScoreWord, wordIndexAtTime, WORD_ONSET_SEEK_SLACK_MS} from '@lib/forkFeatures/voiceScore/wordTimings';
 
 /**
  * Telegram's voice `duration` and HTMLMediaElement.currentTime are both in
@@ -39,29 +39,46 @@ type SeekableAudio = {
 };
 
 /**
- * Seek `audio` so playback starts **inside** word N. Returns the seconds that
- * were written to `currentTime`. If the element snaps early (codec/keyframe),
- * we land further into the token rather than on the previous word's boundary.
+ * Seek `audio` so playback starts at the clicked word's own speech onset
+ * (plus a few milliseconds so an opus packet snap cannot fall earlier).
  */
 export function seekAudioToWord(audio: SeekableAudio, word: VoiceScoreWord): number {
   const durationSec = Number.isFinite(audio.duration) && (audio.duration as number) > 0 ?
     audio.duration as number :
     undefined;
-  let seconds = toMediaSeconds(seekSecondsForWord(word), durationSec);
   const start = word.startMs / 1000;
-  const end = word.endMs / 1000;
+  const end = Math.max(start, word.endMs / 1000);
   const span = Math.max(0, end - start);
-  if(seconds < start || seconds >= end) {
-    seconds = start + span * 0.4;
+  let seconds = toMediaSeconds(seekSecondsForWord(word), durationSec);
+
+  if(seconds < start) {
+    seconds = start + Math.min(0.02, Math.max(0.008, span * 0.02));
   }
 
-  audio.currentTime = seconds;
-  if(audio.currentTime < start) {
-    audio.currentTime = start + Math.min(0.08, Math.max(0.01, span * 0.4));
+  if(seconds > start + WORD_ONSET_SEEK_SLACK_MS / 1000) {
+    seconds = start + Math.min(0.04, WORD_ONSET_SEEK_SLACK_MS / 1000 - 0.01);
   }
 
-  if(audio.currentTime >= end && span > 0) {
-    audio.currentTime = Math.max(start, end - Math.min(0.02, span / 5));
+  if(seconds >= end && span > 0) {
+    seconds = Math.max(start, end - Math.min(0.02, span / 5));
+  }
+
+  let target = seconds;
+  for(let i = 0; i < 8; i++) {
+    audio.currentTime = target;
+    if(audio.currentTime >= start) {
+      break;
+    }
+
+    const deficit = start - audio.currentTime;
+    target = Math.min(
+      start + WORD_ONSET_SEEK_SLACK_MS / 1000 - 0.005,
+      target + deficit + 0.01
+    );
+  }
+
+  if(audio.currentTime > start + WORD_ONSET_SEEK_SLACK_MS / 1000 && span > WORD_ONSET_SEEK_SLACK_MS / 1000) {
+    audio.currentTime = start + 0.04;
   }
 
   return audio.currentTime;
@@ -80,6 +97,7 @@ export function clickedWordStartsInside(
   const timeSec = seekAudioToWord(audio, word);
   const timeMs = timeSec * 1000;
   return wordIndexAtTime(words, timeMs) === index &&
+    seekIsNearOnset(word, timeMs) &&
     timeMs >= word.startMs &&
-    timeMs < word.endMs;
+    (word.endMs <= word.startMs || timeMs < word.endMs);
 }

@@ -12,14 +12,14 @@ Karaoke-style read-along on a voice-message transcription.
 
 - **Where:** inside a voice-message bubble, after you tap the existing transcribe button.
 - **What:** once Telegram returns the transcript, each word is a tap target. The current word highlights in the bubble accent while the clip plays; spoken words stay readable. Tap a word to seek and play from there.
-- **Limitation:** `messages.transcribeAudio` returns plain text, not word timestamps, and it is a Telegram Premium API. Timings are estimated from the clip duration (longer tokens get a larger share), then scaled to the real length. Without Premium or a cached transcript the upstream upsell still appears.
+- **Limitation:** `messages.transcribeAudio` returns plain text, not word timestamps, and it is a Telegram Premium API. Word starts are the speech onsets in the audio (energy after a pause), not an even split by character count. Without Premium or a cached transcript the upstream upsell still appears.
 
 ### 2. Reply Loom
 
 A thread sheet for ordinary reply chains (not only channel comments).
 
 - **Where:** long-press a message (mouse or touch), or right-click → **Thread**. A plain click on a quoted reply still jumps to and highlights that original message. The Thread item is hidden on messages that are not part of a reply chain.
-- **What:** unrelated bubbles dim. A sheet titled **Thread** sits below the chat header and any pinned-message bar, and lists the root plus every loaded reply — including branches and 3+ participants. The composer is armed to reply in that chain. **Back to chat** closes the sheet.
+- **What:** unrelated bubbles dim. A sheet titled **Thread** is `position: fixed` to the visible chat column (left edge after the docked sidebar, right edge at the window), from just below the topbar and pinned plate down to the composer, and lists the root plus every loaded reply — including branches and 3+ participants. It scrolls internally. The composer is armed to reply in that chain. **Back to chat** closes the sheet.
 - **Limitation:** Telegram does not expose a “replies to this mid” search for private chats. The loom walks `reply_to` / `reply_to_mid` on messages already loaded (on screen or in the history cache). Send or scroll to load more of the chain, then reopen.
 
 ### 3. Fan
@@ -38,7 +38,7 @@ A history-scrub loupe.
 - **What:** a card on the right shows month + year, the message text, and a photo or muted looping video preview of the bubble nearest the upper part of the viewport. It hides when scrolling settles. Switching chats resets and rebinds the loupe so it cannot stick on the previous conversation.
 - **Limitation:** the preview uses media already in the DOM (Telegram’s own thumbs / blob URLs). Messages that have not been rendered yet cannot be previewed.
 
-A local playground that drives the same timing, thread-walk, fan-layout and date-label functions is at `/fork-playground.html` while the Vite dev server is running.
+A local playground that drives the same timing, thread-walk, fan-layout and date-label functions is at `/fork-playground.html` while the Vite dev server is running. Layout and Voice Score regression against the **real** `.chat` / topbar / pinned / bubbles CSS lives at `/fork-layout.html` (`?view=thread` or `?view=voice`).
 
 ## Feature flags
 

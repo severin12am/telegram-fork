@@ -1,5 +1,9 @@
-import {estimateWordTimings, seekMsForWord, wordClassAtTime, wordIndexAtTime} from '@lib/forkFeatures/voiceScore/wordTimings';
+import {estimateWordTimings, seekIsNearOnset, seekMsForWord, wordClassAtTime, wordIndexAtTime, WORD_ONSET_SEEK_SLACK_MS} from '@lib/forkFeatures/voiceScore/wordTimings';
 import {clickedWordStartsInside, durationMsFromSeconds, seekAudioToWord, seekSecondsForWord, toMediaSeconds} from '@lib/forkFeatures/voiceScore/seekAudio';
+import {alignWordsToSpeech, detectSpeechRegions, firstSpeechOnsetMs} from '@lib/forkFeatures/voiceScore/speechOnsets';
+import {makePauseWav} from '@lib/forkFeatures/voiceScore/pauseWav';
+import {sheetBoxForChatColumn} from '@lib/forkFeatures/replyLoom/fitSheet';
+import {PAUSE_WORDS_TRANSCRIPT, RUSSIAN_VOICE_TRANSCRIPT, SECOND_ONI_INDEX} from '@lib/forkFeatures/layoutTest/transcript';
 import {collectThreadMids, expandLinksForSeed, findThreadRoot, getReplyToMid, linksFromMessages, messageHasReplyChain} from '@lib/forkFeatures/replyLoom/collectThread';
 import {fanPoses} from '@lib/forkFeatures/fan/collectUnread';
 import {FAN_CLOSE_TEXT, FAN_WHEEL_OPEN} from '@lib/forkFeatures/fan/overlayConstants';
@@ -39,6 +43,7 @@ describe('Voice Score timings', () => {
         expect(seek).toBeGreaterThan(words[i - 1].endMs - 1e-6);
         expect(wordClassAtTime(words[i - 1], seek)).toBe('said');
       }
+      expect(seekIsNearOnset(words[i], seek)).toBe(true);
     }
   });
 
@@ -64,6 +69,8 @@ describe('Voice Score timings', () => {
       if(n > 0) {
         expect(t).toBeGreaterThanOrEqual(words[n - 1].endMs / 1000);
       }
+      expect(seekIsNearOnset(words[n], t * 1000)).toBe(true);
+      expect((t * 1000) - words[n].startMs).toBeLessThanOrEqual(WORD_ONSET_SEEK_SLACK_MS);
     }
   });
 
@@ -222,5 +229,89 @@ describe('feature flags', () => {
     setForkFeatureEnabled('voiceScore', false);
     expect(isForkFeatureEnabled('voiceScore')).toBe(false);
     setForkFeatureEnabled('voiceScore', true);
+  });
+});
+
+describe('Voice Score speech onsets', () => {
+  test('detects a pause between two bursts and the second onset', () => {
+    const wav = makePauseWav({word1Ms: 400, gapMs: 600, word2Ms: 400});
+    const regions = detectSpeechRegions(wav.samples, wav.sampleRate);
+    expect(regions.length).toBe(2);
+    expect(regions[1].startMs).toBeGreaterThan(wav.onset2Ms - 80);
+    expect(regions[1].startMs).toBeLessThan(wav.onset2Ms + 80);
+    const onset = firstSpeechOnsetMs(wav.samples, wav.sampleRate, 400, wav.durationMs);
+    expect(onset).toBeDefined();
+    expect(Math.abs((onset as number) - wav.onset2Ms)).toBeLessThan(100);
+  });
+
+  test('clicking the word after a pause starts within 100ms of its speech onset', () => {
+    const wav = makePauseWav({word1Ms: 400, gapMs: 600, word2Ms: 500});
+    const words = alignWordsToSpeech(PAUSE_WORDS_TRANSCRIPT, wav.durationMs, wav.samples, wav.sampleRate);
+    expect(words.map((word) => word.word)).toEqual(['цвета', 'Они']);
+    expect(Math.abs(words[1].startMs - wav.onset2Ms)).toBeLessThan(100);
+    expect(words[1].startMs).toBeGreaterThan(words[0].endMs - 1);
+
+    const audio = {currentTime: 0, duration: wav.durationMs / 1000};
+    expect(clickedWordStartsInside(words, 1, audio)).toBe(true);
+    const timeMs = audio.currentTime * 1000;
+    expect(timeMs).toBeGreaterThanOrEqual(words[1].startMs - 1);
+    expect(timeMs - wav.onset2Ms).toBeLessThan(100);
+    expect(seekIsNearOnset(words[1], timeMs)).toBe(true);
+    expect(wordIndexAtTime(words, timeMs)).toBe(1);
+  });
+
+  test('a Russian sentence with a pause before Они puts Они on the second burst', () => {
+    const wav = makePauseWav({word1Ms: 900, gapMs: 700, word2Ms: 1600});
+    const words = alignWordsToSpeech(RUSSIAN_VOICE_TRANSCRIPT, wav.durationMs, wav.samples, wav.sampleRate);
+    expect(SECOND_ONI_INDEX).toBeGreaterThan(0);
+    const oni = words[SECOND_ONI_INDEX];
+    expect(oni.word.replace(/[^\p{L}]/gu, '')).toBe('Они');
+    expect(Math.abs(oni.startMs - wav.onset2Ms)).toBeLessThan(100);
+    const audio = {currentTime: 0, duration: wav.durationMs / 1000};
+    expect(clickedWordStartsInside(words, SECOND_ONI_INDEX, audio)).toBe(true);
+    expect((audio.currentTime * 1000) - wav.onset2Ms).toBeLessThan(100);
+  });
+});
+
+describe('Reply Loom sheet fit', () => {
+  test('the sheet sits in the chat column below the pinned bar and above the input', () => {
+    const fit = sheetBoxForChatColumn({
+      column: {left: 213, top: 0, right: 1117, bottom: 800, width: 904, height: 800},
+      topbar: {left: 500, top: 16, right: 1196, bottom: 64, width: 696, height: 48},
+      pinned: {left: 500, top: 72, right: 1196, bottom: 120, width: 696, height: 48},
+      input: {left: 500, top: 736, right: 1196, bottom: 784, width: 696, height: 48},
+      sidebar: {left: 16, top: 16, right: 376, bottom: 784, width: 360, height: 768},
+      viewport: {width: 1280, height: 800}
+    });
+    expect(fit.left).toBe(376);
+    expect(fit.width).toBe(1280 - 376);
+    expect(fit.top).toBe(124);
+    expect(fit.height).toBe(736 - 124);
+  });
+
+  test('in RTL the sheet sits between the window and the docked sidebar', () => {
+    const fit = sheetBoxForChatColumn({
+      column: {left: 0, top: 0, right: 1544, bottom: 800, width: 1544, height: 800},
+      topbar: {left: 0, top: 16, right: 696, bottom: 64, width: 696, height: 48},
+      input: {left: 0, top: 736, right: 696, bottom: 784, width: 696, height: 48},
+      sidebar: {left: 904, top: 16, right: 1264, bottom: 784, width: 360, height: 768},
+      rtl: true,
+      viewport: {width: 1280, height: 800}
+    });
+    expect(fit.left).toBe(0);
+    expect(fit.width).toBe(904);
+  });
+
+  test('without a pinned plate the sheet starts below the topbar', () => {
+    const fit = sheetBoxForChatColumn({
+      column: {left: 0, top: 0, right: 390, bottom: 844, width: 390, height: 844},
+      topbar: {left: 8, top: 8, right: 382, bottom: 56, width: 374, height: 48},
+      input: {left: 8, top: 788, right: 382, bottom: 836, width: 374, height: 48},
+      viewport: {width: 390, height: 844}
+    });
+    expect(fit.left).toBe(0);
+    expect(fit.width).toBe(390);
+    expect(fit.top).toBe(60);
+    expect(fit.top + fit.height).toBe(788);
   });
 });
