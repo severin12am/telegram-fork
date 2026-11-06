@@ -12,7 +12,8 @@ import BubbleGroups from '@components/chat/bubbleGroups';
 import createDateBubble from '@components/chat/dateBubble';
 import {isForkFeatureEnabled} from '@lib/forkFeatures/flags';
 import {closeReplyLoom, destroyReplyLoom, openReplyLoom, refreshReplyLoom} from '@lib/forkFeatures/replyLoom/sheet';
-import {destroyYearRail, ensureYearRail} from '@lib/forkFeatures/yearRail/loupe';
+import {attachReplyLoomPress} from '@lib/forkFeatures/replyLoom/press';
+import {destroyYearRail, ensureYearRail, resetYearRail} from '@lib/forkFeatures/yearRail/loupe';
 import showDatePickerPopup from '@components/popups/datePicker';
 import confirmationPopup from '@components/confirmationPopup';
 import showStickersPopup from '@components/popups/stickers';
@@ -1901,6 +1902,19 @@ export default class ChatBubbles {
 
     this.chat.contextMenu.attachTo(container);
     this.chat.selection.attachListeners(container, new ListenerSetter());
+    attachReplyLoomPress({
+      element: container,
+      listenerSetter: this.listenerSetter,
+      getHost: () => ({
+        container: this.container,
+        chatInner: this.chatInner,
+        chat: this.chat
+      }),
+      getMessage: (bubble) => {
+        const message = this.chat.getMessage(getBubbleFullMid(bubble));
+        return message?._ === 'message' ? message : undefined;
+      }
+    });
 
     if(DEBUG) {
       this.listenerSetter.add(container)('dblclick', (e) => {
@@ -6242,6 +6256,7 @@ export default class ChatBubbles {
   public cleanup(bubblesToo = false) {
     this.log('cleanup');
     closeReplyLoom(this.container);
+    resetYearRail(this.container);
 
     // Content is about to be wiped (peer switch / screen teardown) — end every read-metrics phase.
     this.readMetricsTracker?.finalizeAll();

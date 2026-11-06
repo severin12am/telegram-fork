@@ -100,3 +100,31 @@ export function getReplyToMid(message: {
 
   return undefined;
 }
+
+/**
+ * True when this message sits on a reply chain: it replies to something, or
+ * something already loaded replies to it, or a comment thread has replies.
+ */
+export function messageHasReplyChain(
+  message: {
+    mid?: number,
+    reply_to?: {_?: string, reply_to_msg_id?: number},
+    replies?: {replies?: number}
+  },
+  links: ThreadLink[]
+): boolean {
+  if(getReplyToMid(message)) {
+    return true;
+  }
+
+  if((message.replies?.replies || 0) > 0) {
+    return true;
+  }
+
+  const mid = message.mid;
+  if(!mid) {
+    return false;
+  }
+
+  return links.some((link) => link.replyToMid === mid);
+}

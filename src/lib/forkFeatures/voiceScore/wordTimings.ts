@@ -47,15 +47,16 @@ export function estimateWordTimings(text: string, durationMs: number): VoiceScor
 }
 
 export function wordClassAtTime(word: VoiceScoreWord, timeMs: number): 'now' | 'said' | '' {
-  if(timeMs >= word.endMs) {
-    return 'said';
+  if(timeMs < 0 || timeMs < word.startMs) {
+    return '';
   }
 
-  if(timeMs >= word.startMs) {
+  // Half-open [start, end) so the playhead at a boundary belongs to the next word.
+  if(timeMs < word.endMs) {
     return 'now';
   }
 
-  return '';
+  return 'said';
 }
 
 export function wordIndexAtTime(words: VoiceScoreWord[], timeMs: number): number {
@@ -70,4 +71,19 @@ export function wordIndexAtTime(words: VoiceScoreWord[], timeMs: number): number
   }
 
   return words.length - 1;
+}
+
+/**
+ * Seek target for a tapped word. HTMLMediaElement rounds `currentTime`, and
+ * `startMs` is also the previous token's `endMs`, so seeking to the boundary
+ * plays the previous word. Land a little way into this token instead.
+ */
+export function seekMsForWord(word: VoiceScoreWord): number {
+  const span = Math.max(0, word.endMs - word.startMs);
+  if(span <= 0) {
+    return Math.max(0, word.startMs);
+  }
+
+  const inward = Math.min(40, Math.max(12, span * 0.1));
+  return Math.min(word.startMs + inward, word.endMs - Math.min(6, span / 5));
 }

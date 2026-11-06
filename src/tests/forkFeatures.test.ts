@@ -1,5 +1,5 @@
-import {estimateWordTimings, wordClassAtTime, wordIndexAtTime} from '@lib/forkFeatures/voiceScore/wordTimings';
-import {collectThreadMids, findThreadRoot, getReplyToMid} from '@lib/forkFeatures/replyLoom/collectThread';
+import {estimateWordTimings, seekMsForWord, wordClassAtTime, wordIndexAtTime} from '@lib/forkFeatures/voiceScore/wordTimings';
+import {collectThreadMids, findThreadRoot, getReplyToMid, messageHasReplyChain} from '@lib/forkFeatures/replyLoom/collectThread';
 import {fanPoses} from '@lib/forkFeatures/fan/collectUnread';
 import {formatYearRailLabel, pickFocusBubble, shouldShowYearRail} from '@lib/forkFeatures/yearRail/focusMessage';
 import {FORK_FEATURE_DEFAULTS, isForkFeatureEnabled, setForkFeatureEnabled} from '@lib/forkFeatures/flags';
@@ -25,6 +25,19 @@ describe('Voice Score timings', () => {
     expect(wordClassAtTime(words[2], now)).toBe('');
     expect(wordIndexAtTime(words, now)).toBe(1);
   });
+
+  test('tapping a word seeks inside that word, not onto the previous token', () => {
+    const words = estimateWordTimings('one two three', 3000);
+    for(let i = 0; i < words.length; i++) {
+      const seek = seekMsForWord(words[i]);
+      expect(wordIndexAtTime(words, seek)).toBe(i);
+      expect(wordClassAtTime(words[i], seek)).toBe('now');
+      if(i > 0) {
+        expect(seek).toBeGreaterThan(words[i - 1].endMs - 1e-6);
+        expect(wordClassAtTime(words[i - 1], seek)).toBe('said');
+      }
+    }
+  });
 });
 
 describe('Reply Loom thread walk', () => {
@@ -48,6 +61,18 @@ describe('Reply Loom thread walk', () => {
   test('reads reply_to_msg_id from a messageReplyHeader', () => {
     expect(getReplyToMid({reply_to: {_: 'messageReplyHeader', reply_to_msg_id: 42}})).toBe(42);
     expect(getReplyToMid({reply_to: {_: 'messageReplyStoryHeader'}})).toBeUndefined();
+  });
+
+  test('Thread is only for messages that sit on a reply chain', () => {
+    const links = [
+      {mid: 10},
+      {mid: 11, replyToMid: 10},
+      {mid: 99}
+    ];
+    expect(messageHasReplyChain({mid: 10}, links)).toBe(true);
+    expect(messageHasReplyChain({mid: 11, reply_to: {_: 'messageReplyHeader', reply_to_msg_id: 10}}, links)).toBe(true);
+    expect(messageHasReplyChain({mid: 99}, links)).toBe(false);
+    expect(messageHasReplyChain({mid: 7, replies: {replies: 3}}, [])).toBe(true);
   });
 });
 

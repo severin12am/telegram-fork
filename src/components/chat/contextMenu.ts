@@ -16,7 +16,7 @@ import {attachClickEvent, simulateClickEvent} from '@helpers/dom/clickEvent';
 import isSelectionEmpty from '@helpers/dom/isSelectionEmpty';
 import {Message, Poll, Chat as MTChat, MessageEntity, MessageMedia, InputStickerSet, StickerSet, Document, Reaction, Photo, SponsoredMessage, TextWithEntities, TodoItem, TodoCompletion, MessageReplyHeader, PollAnswer} from '@layer';
 import {isForkFeatureEnabled} from '@lib/forkFeatures/flags';
-import {openReplyLoom} from '@lib/forkFeatures/replyLoom/sheet';
+import {chatMessageHasReplyChain, openReplyLoom} from '@lib/forkFeatures/replyLoom/sheet';
 import assumeType from '@helpers/assumeType';
 import showSponsoredPopup from '@components/popups/sponsored';
 import ListenerSetter from '@helpers/listenerSetter';
@@ -1081,10 +1081,21 @@ export default class ChatContextMenu {
           chat: this.chat
         }, message);
       },
-      verify: () => isForkFeatureEnabled('replyLoom') &&
-        this.message?._ === 'message' &&
-        !this.message.pFlags.is_outgoing &&
-        !isAnchoredEphemeralMessage(this.message)
+      verify: () => {
+        if(!isForkFeatureEnabled('replyLoom') ||
+          this.message?._ !== 'message' ||
+          this.message.pFlags.is_outgoing ||
+          isAnchoredEphemeralMessage(this.message)) {
+          return false;
+        }
+
+        const message = this.message as Message.message;
+        return chatMessageHasReplyChain(
+          message,
+          this.chat.bubbles.chatInner,
+          (mid) => this.chat.getMessage(mid)
+        );
+      }
     }, {
       icon: 'bubblereply',
       text: 'ViewReplies',

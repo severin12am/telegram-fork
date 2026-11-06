@@ -6151,14 +6151,15 @@ const lang = {
   'ForkFeatures.VoiceScore': 'Voice Score',
   'ForkFeatures.VoiceScore.Info': 'Highlight each word of a transcription as the voice message plays. Tap a word to jump there.',
   'ForkFeatures.ReplyLoom': 'Reply Loom',
-  'ForkFeatures.ReplyLoom.Info': 'Open a reply chain as its own thread sheet. Long-press a message and choose Thread, or tap a reply quote.',
+  'ForkFeatures.ReplyLoom.Info': 'Open a reply chain as its own thread sheet. Long-press a message (mouse or touch), or right-click and choose Thread. Only messages on a reply chain show it.',
   'ForkFeatures.Fan': 'Fan',
-  'ForkFeatures.Fan.Info': 'Pull down on the chat list (or scroll up at the top) to fan unread chats into cards. Tap a card to open it, swipe it away to skip it.',
+  'ForkFeatures.Fan.Info': 'Pull down on the chat list (or scroll up at the top) to fan unread chats into cards. Tap a card to open it, swipe it away to skip it. Scroll down or tap Close to put them all away.',
   'ForkFeatures.YearRail': 'Year Rail',
   'ForkFeatures.YearRail.Info': 'While you scrub a long chat history, a loupe previews the photo, video or text at that date.',
   'ForkFeatures.Thread': 'Thread',
   'ForkFeatures.BackToChat': 'Back to chat',
-  'ForkFeatures.FanEmpty': 'No unread chats'
+  'ForkFeatures.FanEmpty': 'No unread chats',
+  'ForkFeatures.FanClose': 'Close'
 };
 
 export default lang;

@@ -1,7 +1,7 @@
 import {createEffect, createMemo, createSignal, For, onCleanup} from 'solid-js';
 import setCurrentTime from '@helpers/dom/setCurrentTime';
 import {isForkFeatureEnabled} from '@lib/forkFeatures/flags';
-import {estimateWordTimings, VoiceScoreWord, wordClassAtTime} from '@lib/forkFeatures/voiceScore/wordTimings';
+import {estimateWordTimings, seekMsForWord, VoiceScoreWord, wordClassAtTime} from '@lib/forkFeatures/voiceScore/wordTimings';
 
 type TranscribableRow = HTMLElement & {
   message?: {mid?: number},
@@ -57,7 +57,9 @@ export default function VoiceScoreWords(props: {
       return;
     }
 
-    const seconds = Math.max(0, word.startMs / 1000);
+    const ms = Math.max(0, seekMsForWord(word));
+    setTimeMs(ms);
+    const seconds = ms / 1000;
     if(typeof row.playWithTimestamp === 'function') {
       row.playWithTimestamp(seconds);
       return;
@@ -69,7 +71,7 @@ export default function VoiceScoreWords(props: {
 
   return (
     <span class="voice-score-words" data-fork-feature="voice-score">
-      <For each={words()}>{(word) => {
+      <For each={words()}>{(word, index) => {
         const cls = () => wordClassAtTime(word, timeMs());
         return (
           <>
@@ -83,7 +85,7 @@ export default function VoiceScoreWords(props: {
               onClick={(event) => {
                 event.preventDefault();
                 event.stopPropagation();
-                seekTo(word);
+                seekTo(words()[index()] ?? word);
               }}
             >
               {word.word}

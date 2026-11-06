@@ -18,7 +18,7 @@ Karaoke-style read-along on a voice-message transcription.
 
 A thread sheet for ordinary reply chains (not only channel comments).
 
-- **Where:** long-press a message → **Thread**, or tap a reply quote in the bubble.
+- **Where:** long-press a message (mouse or touch), right-click → **Thread**, or tap a reply quote. The Thread item is hidden on messages that are not part of a reply chain.
 - **What:** unrelated bubbles dim. A bottom sheet titled **Thread** lists the root and every reply we can see in the open chat. The composer is armed to reply in that chain. **Back to chat** closes the sheet.
 - **Limitation:** Telegram does not expose a “replies to this mid” search for private chats. The loom walks `reply_to` on messages already loaded in the chat. Send or scroll to load more of the chain, then reopen.
 
@@ -26,8 +26,8 @@ A thread sheet for ordinary reply chains (not only channel comments).
 
 Unread chats spread into a card fan.
 
-- **Where:** the left chat list. Pull down from the top (touch or click-drag) or scroll/wheel up while already at the top.
-- **What:** unread rows become stacked, slightly rotated cards (title, last-message preview, unread badge, the same avatar Telegram already drew). Tap a card to open that chat. Swipe a card sideways to skip it. Tap the dimmed backdrop to close.
+- **Where:** the left chat list. Pull down from the top (touch or click-drag) or scroll/wheel up while already at the top — a small nudge is ignored; the pull has to be deliberate.
+- **What:** unread rows become stacked, slightly rotated cards (title, last-message preview, unread badge, the same avatar Telegram already drew). Tap a card to open that chat. Swipe a card sideways to skip it. **Close**, scroll/swipe down, or tap the dimmed backdrop puts every card away and the list is immediately usable again.
 - **Limitation:** cards come from the chats already rendered in the current folder. Chats that have not been painted yet will not appear until they show up in the list.
 
 ### 4. Year Rail
@@ -35,7 +35,7 @@ Unread chats spread into a card fan.
 A history-scrub loupe.
 
 - **Where:** the open chat, while you fast-scroll a long history.
-- **What:** a card on the right shows month + year, the message text, and a photo or muted looping video preview of the bubble nearest the upper part of the viewport. It hides when scrolling settles.
+- **What:** a card on the right shows month + year, the message text, and a photo or muted looping video preview of the bubble nearest the upper part of the viewport. It hides when scrolling settles. Switching chats resets and rebinds the loupe so it cannot stick on the previous conversation.
 - **Limitation:** the preview uses media already in the DOM (Telegram’s own thumbs / blob URLs). Messages that have not been rendered yet cannot be previewed.
 
 A local playground that drives the same timing, thread-walk, fan-layout and date-label functions is at `/fork-playground.html` while the Vite dev server is running.

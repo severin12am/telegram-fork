@@ -1,5 +1,5 @@
 import './playground.scss';
-import {estimateWordTimings, wordClassAtTime} from '@lib/forkFeatures/voiceScore/wordTimings';
+import {estimateWordTimings, seekMsForWord, wordClassAtTime} from '@lib/forkFeatures/voiceScore/wordTimings';
 import {collectThreadMids} from '@lib/forkFeatures/replyLoom/collectThread';
 import {fanPoses} from '@lib/forkFeatures/fan/collectUnread';
 import {formatYearRailLabel} from '@lib/forkFeatures/yearRail/focusMessage';
@@ -120,7 +120,7 @@ function voiceScore(host: HTMLElement) {
   };
 
   buttons.forEach((button, i) => {
-    button.onclick = () => seek(words[i].startMs);
+    button.onclick = () => seek(seekMsForWord(words[i]));
   });
 
   seek(0);

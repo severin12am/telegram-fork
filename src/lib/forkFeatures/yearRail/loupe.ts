@@ -24,6 +24,20 @@ export class YearRailLoupe {
   private lastMid = 0;
   private previewVideo?: HTMLVideoElement;
 
+  public rebind(host: YearRailHost) {
+    const changed = this.host.chatInner !== host.chatInner || this.host.scrollable !== host.scrollable;
+    this.host = host;
+    if(changed) {
+      this.reset();
+    }
+  }
+
+  public reset() {
+    this.hide();
+    this.lastMid = 0;
+    this.media.replaceChildren();
+  }
+
   constructor(private host: YearRailHost) {
     this.root = document.createElement('div');
     this.root.className = 'year-rail-loupe';
@@ -177,9 +191,15 @@ export function ensureYearRail(host: YearRailHost): YearRailLoupe {
   if(!loupe) {
     loupe = new YearRailLoupe(host);
     loupes.set(host.container, loupe);
+  } else {
+    loupe.rebind(host);
   }
 
   return loupe;
+}
+
+export function resetYearRail(container: HTMLElement) {
+  loupes.get(container)?.reset();
 }
 
 export function destroyYearRail(container: HTMLElement) {

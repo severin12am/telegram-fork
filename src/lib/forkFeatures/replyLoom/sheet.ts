@@ -1,7 +1,7 @@
 import {Message} from '@layer';
 import {i18n} from '@lib/langPack';
 import liteMode from '@helpers/liteMode';
-import {collectThreadMids, getReplyToMid, ThreadLink} from '@lib/forkFeatures/replyLoom/collectThread';
+import {collectThreadMids, getReplyToMid, messageHasReplyChain, ThreadLink} from '@lib/forkFeatures/replyLoom/collectThread';
 import {isForkFeatureEnabled} from '@lib/forkFeatures/flags';
 
 export type ReplyLoomHost = {
@@ -53,7 +53,7 @@ function messageText(message: any): string {
   return '';
 }
 
-function linksFromDom(chatInner: HTMLElement, getMessage: (mid: number) => any): ThreadLink[] {
+export function linksFromChatInner(chatInner: HTMLElement, getMessage: (mid: number) => any): ThreadLink[] {
   const bubbles = chatInner.querySelectorAll<HTMLElement>('.bubble[data-mid]:not(.is-date)');
   const links: ThreadLink[] = [];
   const seen = new Set<number>();
@@ -79,6 +79,10 @@ export class ReplyLoomController {
   private body: HTMLElement;
   private open = false;
   private seedMid = 0;
+
+  public rebind(host: ReplyLoomHost) {
+    this.host = host;
+  }
 
   constructor(private host: ReplyLoomHost) {
     this.sheet = document.createElement('div');
@@ -168,7 +172,7 @@ export class ReplyLoomController {
 
   private render(seed: Message.message) {
     const getMessage = (mid: number) => this.host.chat.getMessage(mid);
-    const links = linksFromDom(this.host.chatInner, getMessage);
+    const links = linksFromChatInner(this.host.chatInner, getMessage);
     if(!links.some((link) => link.mid === seed.mid)) {
       links.push({mid: seed.mid, replyToMid: getReplyToMid(seed)});
     }
@@ -248,8 +252,20 @@ export class ReplyLoomController {
 
 const controllers = new WeakMap<object, ReplyLoomController>();
 
+export function chatMessageHasReplyChain(
+  message: Message.message,
+  chatInner: HTMLElement,
+  getMessage: (mid: number) => any
+): boolean {
+  return messageHasReplyChain(message, linksFromChatInner(chatInner, getMessage));
+}
+
 export function openReplyLoom(host: ReplyLoomHost, message: Message.message): boolean {
   if(!isForkFeatureEnabled('replyLoom') || !message || message._ !== 'message') {
+    return false;
+  }
+
+  if(!chatMessageHasReplyChain(message, host.chatInner, (mid) => host.chat.getMessage(mid))) {
     return false;
   }
 
@@ -257,6 +273,8 @@ export function openReplyLoom(host: ReplyLoomHost, message: Message.message): bo
   if(!controller) {
     controller = new ReplyLoomController(host);
     controllers.set(host.container, controller);
+  } else {
+    controller.rebind(host);
   }
 
   controller.toggle(message);
