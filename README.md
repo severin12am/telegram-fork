@@ -1,83 +1,71 @@
-# Telegram Web K (fork)
+# Telegram Web K fork
 
-A working fork of Telegram’s official open-source web client **[Telegram Web K / tweb](https://github.com/morethanwords/tweb)** (GPL-3.0).
+A working fork of Telegram’s official open-source web client **[Telegram Web K / tweb](https://github.com/morethanwords/tweb)** (GPL-3.0). Official WebK stays at https://web.telegram.org/k/.
 
-This tree keeps upstream history. The imported `tweb/master` commit is **`b494470fa4ebbd7bb64fa9378f202944dc8158fd`**. Four extra features — Voice Score, Reply Loom, Fan, and Year Rail — are implemented as real client code against live Telegram chats. See [FORK.md](FORK.md) for what each one does, where it lives in the UI, and the MTProto limits.
+This tree keeps upstream history. The imported `tweb/master` commit is **`b494470fa4ebbd7bb64fa9378f202944dc8158fd`**. Extra features are real client code against live Telegram chats; details and limits are in [FORK.md](FORK.md).
 
-Official WebK remains available at https://web.telegram.org/k/
+## Extra features
 
-## Run locally on Windows
+All four default **on**. Toggle them in **Settings → General Settings → Extra features**, or with query flags such as `http://localhost:8080/?fan=0`. Flags live in `localStorage` under `tweb-fork-features`.
 
-You need **Node.js 22.18+** (or 24.11+) and **pnpm 11**. Git is required so the `opus-recorder` and `solid` submodules can be fetched.
+| Feature | What it does |
+|---|---|
+| **Voice Score** | After you transcribe a voice message, each word is a tap target. The current word highlights while the clip plays; tap a word to play from there. |
+| **Reply Loom** | Long-press or right-click → **Thread** on a reply chain. A comments-style sheet shows the tree with real avatars and connector lines. Esc or the header **X** closes it. |
+| **Fan** | At the top of the chat list (`scrollTop` 0), pull/overscroll up to spread unread chats into cards. **Close all** puts them away. |
+| **Year Rail** | While you fast-scroll a long chat, a loupe on the right shows month + year and a preview of the nearest bubble. |
 
-1. Install Node from https://nodejs.org/ (LTS 22 is fine).
-2. In **PowerShell** or **Command Prompt**:
+`?voiceScore=0&replyLoom=0&fan=0&yearRail=0` turns them all off.
 
-```bat
+## Run in development
+
+You need **Node.js 22.18+** (or 24.11+) and **pnpm 11**. Git is required for the `opus-recorder` and `solid` submodules.
+
+```bash
+git clone https://github.com/severin12am/telegram-fork.git
+cd telegram-fork
+git submodule update --init --recursive
 corepack enable
 corepack prepare pnpm@11.16.0 --activate
-```
-
-3. Clone this repository, then:
-
-```bat
-cd path\to\this\repo
-git submodule update --init --recursive
 pnpm install
 pnpm start
 ```
 
-4. Open http://localhost:8080/ in Chrome or Edge. After `pnpm dev`, a local playground of the four extra features (same timing / thread / fan / date code as the client) is at http://localhost:43817/fork-playground.html.
-5. Sign in with your own Telegram account the same way you would on web.telegram.org/k — phone number, login code, 2FA password if you use one. This app never stores those in source and never logs them.
+Open http://localhost:8080/ and sign in with your own Telegram account (same flow as web.telegram.org/k). This app does not log phone numbers, codes, or passwords.
 
-Optional:
+`pnpm dev` serves on http://localhost:43817/ and binds every interface. While the Vite server is running, `/fork-playground.html` and `/fork-layout.html` are local fixtures for the extra features.
 
-```bat
-pnpm dev
-```
+## Static dist (`START.bat` layout)
 
-serves the same app on http://localhost:43817/ and binds every interface (useful if you open the page from another device on the LAN).
-
-To turn one extra feature off, append a query flag, for example http://localhost:8080/?fan=0 — or use **Settings → General Settings → Extra features**.
-
-### Production / static host
-
-```bat
+```bash
 pnpm build:static
 ```
 
-That is `vite build` without the full test/typecheck/changelog pipeline. Copy the `dist/` folder to any static host (nginx, GitHub Pages, Cloudflare Pages, `npx serve dist`). A full `pnpm build` also runs the upstream test suite, typecheck, and changelog step; it is slower and not required just to ship the files.
+That is `vite build` without the full test/typecheck/changelog pipeline. The output is `dist/`.
 
-Docker (upstream):
+To pack a Windows-ready folder like the v6 zip:
+
+1. Copy `dist/` to a folder named `telegram-webk-fork/`.
+2. Copy `LICENSE` into that folder.
+3. Add `START.bat` in the same folder:
 
 ```bat
-docker-compose up tweb.dependencies
-docker-compose up tweb.develop
+@echo off
+echo Starting Telegram Web K fork on http://localhost:8080/
+npx --yes serve -s . -l 8080
 ```
 
-Then open http://localhost:8080/
+4. Double-click `START.bat` (needs Node.js) or run `npx --yes serve -s . -l 8080` from inside `telegram-webk-fork/`, then open http://localhost:8080/.
 
-## Debugging query parameters
-
-Same as upstream. Examples: http://localhost:8080/?test=1
-
-* **test=1** — Telegram test DCs
-* **debug=1** — extra logging
-* **noSharedWorker=1** — disable Shared Worker
-* **http=1** — force HTTPS transport
-* **voiceScore=0 / replyLoom=0 / fan=0 / yearRail=0** — disable a fork feature
+Do not commit `dist/`, `node_modules/`, or zip files.
 
 ## License and credit
 
-Licensed under **GPL-3.0-only**, same as tweb. The full license is in [LICENSE](LICENSE).
+Licensed under **GPL-3.0-only**, same as tweb. The full text is in [LICENSE](LICENSE).
 
 This fork is based on:
 
-* [morethanwords/tweb](https://github.com/morethanwords/tweb) — Telegram Web K, Eduard Kuzmenko and contributors
-* [zhukov/webogram](https://github.com/zhukov/webogram) — the original Webogram client
+- [morethanwords/tweb](https://github.com/morethanwords/tweb) — Telegram Web K, Eduard Kuzmenko and contributors
+- [zhukov/webogram](https://github.com/zhukov/webogram) — the original Webogram client
 
 Do not file product bugs for the four extra features on bugs.telegram.org; those are local to this fork.
-
-### Upstream dependencies
-
-Unchanged from tweb: BigInteger.js, fflate, cryptography, emoji-data, tlottie, fast-png, opus-recorder, Prism, Solid, TinyLD, libwebp.js, Mediabunny, Temml, and the others listed in the original tweb README.
